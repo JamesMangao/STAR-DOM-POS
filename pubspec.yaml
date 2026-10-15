@@ -1,0 +1,46 @@
+name: stardom_pos
+description: "STAR:DOM POS — offline-first single-owner booth POS."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.8.0
+  drift: ^2.25.0
+  sqlite3_flutter_libs: ^0.5.0
+  flutter_secure_storage: ^9.2.4
+  material_symbols_icons: ^4.2960.0
+  uuid: ^4.5.1
+  device_info_plus: ^11.3.0
+  intl: ^0.20.2
+  path_provider: ^2.1.5
+  esc_pos_bluetooth: ^0.4.1
+  flutter_bluetooth_serial: ^0.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.25.0
+  build_runner: ^2.4.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/fonts/
+    - assets/images/
+
+  fonts:
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora.ttf
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans.ttf

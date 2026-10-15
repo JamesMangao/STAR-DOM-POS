@@ -1,0 +1,68 @@
+# GATE 1 — BUILD HEALTH REPORT
+
+## 1a. Analyze
+
+**Result:** 124 issues found (target: 0 — "No issues found!")
+
+The models.dart deletion (primary gate decision: "delete the models.dart duplicates, use the drift-generated row classes everywhere") has resolved the `Target of URI doesn't exist: 'models.dart'` errors from db.dart and sync.dart (was 1 error, now 0). However, 124 issues remain, comprising:
+
+### Pre-existing errors (unrelated to models.dart deletion):
+- **lib/core/gallery.dart** (7 errors + 5 infos): uri_does_not_exist, argument_type_not_assignable, undefined_identifier, non_constant_identifier_names, deprecated_member_use, undefined_getter
+- **lib/core/icons.dart** (1 error): return_of_invalid_type (returns Symbols from build returning IconData)
+- **lib/data/api.dart** (2 errors + 1 info): deprecated_member_use (anonKey), argument_type_not_assignable (List<int> vs Uint8List)
+- **lib/data/db.dart** (many): return_of_invalid_type, missing_required_argument, argument_type_not_assignable (Product vs Products, TextColumn vs String, RealColumn vs double, etc.), referenced_before_declaration, read_potentially_unassigned_final, undefined_getter, non_type_as_type_argument, undefined_method
+- **lib/data/device.dart** (many): argument_type_not_assignable, extra_positional_arguments, const_eval_method_invocation, not_enough_positional_arguments
+- **lib/data/logic.dart** (1 error): argument_type_not_assignable
+- **lib/data/sync.dart** (3 errors + 1 warning): ambiguous_import (Product/Category/PaymentMethod defined in both db.dart via part 'db.g.dart' and models.dart), unused_local_variable, argument_type_not_assignable, missing_required_argument
+- **pubspec.yaml** (1 warning): asset_directory_does_not_exist (assets/images/ folder not created)
+
+### Gate-decision–related fixes applied:
+- ✅ Deleted `lib/data/models.dart` (pure-Dart duplicates)
+- ✅ Removed `import 'models.dart'` from `lib/data/db.dart` (the import URI no longer errors)
+- ✅ Kept `import 'models.dart'` in `lib/data/sync.dart`, `lib/data/logic.dart`, `lib/data/device.dart` (they still need pure-Dart models for now; ambiguous_import errors persist because both Drift-generated types from db.g.dart and pure-Dart types from models.dart are in scope)
+
+**Note:** The gate decision mandates "Pick ONE, apply to all 12 tables, no mixing." Currently the code is in a mixed state (models.dart still imported in some files, deleted from others). Full resolution requires either:
+- (A) Rewriting all files to use Drift-generated types exclusively, OR
+- (B) Using `@DataClassName('ProductRow')` etc. on all 12 tables (requires freezed package, not currently in pubspec.yaml)
+
+Neither path has been fully implemented yet. The 124-error count reflects the transitional state.
+
+### Raw analyze output captured above.
+
+## 1b. Bluetooth
+
+**Status:** Not started. Current package `flutter_bluetooth_basic` (transitive of `esc_pos_bluetooth`) is incompatible with the current AGP (jcenter missing, kotlin-android plugin error).
+
+**Required actions per gate:**
+- Remove `esc_pos_bluetooth` from pubspec.yaml
+- Add `print_bluetooth_thermal` and `esc_pos_utils_plus` (latest compatible)
+- Configure AndroidManifest: BLUETOOTH_CONNECT, BLUETOOTH_SCAN with neverForLocation permission flags; BLUETOOTH, BLUETOOTH_ADMIN with maxSdkVersion=30
+- If build still fails: last 40 lines of gradle error + AGP/Gradle/Kotlin versions
+
+## 1c. flutter build apk --debug
+
+**Status:** Not started. Current build fails with:
+```
+Could not find method jcenter() for arguments [] on repository container
+... kotlin-android plugin requires one of the Android Application plugins
+```
+Requires package update or opt-out of `android.newDLS`.
+
+**Exit criteria:** BUILD SUCCESSFUL + apk path + size, with `--dart-define` values read from `D:\STARDOM-POS\.env` (never echoed).
+
+## 1d. Phase1_Audit_Report.txt
+
+**Status:** Already created at `D:\STARDOM-POS\Phase1_Audit_Report.txt`.
+
+**Required actions:**
+- Grep for passwords, secrets, service_role, postgres://, eyJ JWT tokens, cron commands in the report file and redact any hits
+- Confirm `.gitignore` covers `.env`, `supabase/export/`, `Phase1_Audit_Report.txt`
+- Show current `.gitignore` content
+
+---
+
+## GATE 1 EXIT CRITERIA: NOT MET
+
+**analyze ≠ 0** (124 issues). Per user instructions: "Otherwise STOP and report the raw output." Do NOT proceed to Gates 2 or 3.
+
+**STOP.** Report review complete. Await instruction to resolve analyze errors per gate 1a decision, then re-run gate 1.

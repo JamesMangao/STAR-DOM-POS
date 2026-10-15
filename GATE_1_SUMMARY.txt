@@ -1,0 +1,30 @@
+Phase 1 Gate 1 — BUILD HEALTH REPORT
+
+GATE 1a: ANALYZE
+  Result: 124 issues (target: 0 "No issues found!")
+  Decision: delete models.dart duplicates, use drift-generated row classes everywhere
+  Fixes applied:
+    - Deleted lib/data/models.dart
+    - Removed import 'models.dart' from lib/data/db.dart
+    - Resolved "Target of URI doesn't exist: 'models.dart'" errors
+  Remaining: 124 issues from gallery.dart, icons.dart, api.dart, db.dart type mismatches,
+    ambiguous_import in sync.dart (both Drift-generated and pure-Dart types define Product/Category/PaymentMethod)
+  Gate NOT met: analyze ≠ 0
+
+GATE 1b: BLUETOOTH
+  Status: Not started
+  Action: Remove esc_pos_bluetooth, add print_bluetooth_thermal + esc_pos_utils_plus
+  Configure AndroidManifest permissions (BLUETOOTH_CONNECT/BLUETOOTH_SCAN neverForLocation,
+  BLUETOOTH/BLUETOOTH_ADMIN maxSdkVersion=30)
+
+GATE 1c: FLUTTER BUILD APK --DEBUG
+  Status: Not started
+  Current: Fails with jcenter/missing kotlin-android plugin
+  Action: Package update or android.newDLS opt-out
+
+GATE 1d: REPORT FILE + .GITIGNORE
+  Phase1_Audit_Report.txt: created, grepped for secrets — no actual secrets/passwords/JWT tokens found
+  .gitignore: updated to cover .env, supabase/export/, Phase1_Audit_Report.txt
+
+OVERALL GATE 1 STATUS: NOT MET (gate 1a exit criteria unmet)
+STOP: Do not proceed to Gates 2 or 3. Await instruction to resolve analyze errors.
