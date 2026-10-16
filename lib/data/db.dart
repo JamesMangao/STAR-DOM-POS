@@ -1002,6 +1002,12 @@ class AppDatabase extends _$AppDatabase {
 
   /// Enqueue one outbox event. `id` is the deterministic dedupe key
   /// (entity, entity_id, updated_at-UTC) so a replay never double-sends.
+  ///
+  /// Same-instant re-enqueue (same deterministic id):
+  ///   * row NOT yet sent -> replace payload/op, keep attempts + backoff;
+  ///   * row already sent -> no-op: never resurrect, never overwrite, never
+  ///     duplicate. The `WHERE sync_outbox.synced_at IS NULL` on the upsert
+  ///     makes that a database-level guarantee, not a race-prone check.
   Future<void> _enqueue({
     required String storeId,
     required String deviceId,
@@ -1012,19 +1018,29 @@ class AppDatabase extends _$AppDatabase {
     Map<String, dynamic>? payload,
     String? payloadJson,
   }) async {
-    // Upsert, not insert: re-enqueueing the same deterministic event (same
-    // entity/entity_id/updated_at) refreshes the payload instead of throwing.
-    // synced_at is not in the companion, so an already-synced row stays synced.
-    await into(syncOutbox).insertOnConflictUpdate(
+    final id = OutboxEventId.of(entity, entityId, updatedAt);
+    final body = payloadJson ?? jsonEncode(payload ?? const {});
+    await into(syncOutbox).insert(
       SyncOutboxCompanion(
-        id: Value(OutboxEventId.of(entity, entityId, updatedAt)),
+        id: Value(id),
         storeId: Value(storeId),
         deviceId: Value(deviceId),
         entity: Value(entity),
         entityId: Value(entityId),
         op: Value(op),
-        payload: Value(payloadJson ?? jsonEncode(payload ?? const {})),
+        payload: Value(body),
         createdAt: Value(updatedAt),
+      ),
+      // DO UPDATE ... WHERE sync_outbox.synced_at IS NULL:
+      //   unsent -> refresh payload/op/created_at (attempts + backoff kept);
+      //   sent   -> the WHERE is false, so the row is left exactly as it is.
+      onConflict: DoUpdate(
+        (old) => SyncOutboxCompanion(
+          payload: Value(body),
+          op: Value(op),
+          createdAt: Value(updatedAt),
+        ),
+        where: (old) => old.syncedAt.isNull(),
       ),
     );
   }

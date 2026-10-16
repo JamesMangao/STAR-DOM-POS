@@ -165,6 +165,19 @@ void main() {
       expect(await count('stock_events'), 1);
       expect(await saleOutboxCount(), 1);
       expect(await db.stockOf('p1'), -2);
+
+      // snapshot fields, set at sale time in the same txn
+      final payment = await (db.select(
+        db.payments,
+      )..where((t) => t.orderId.equals(order.id))).getSingle();
+      expect(payment.methodName, 'Cash');
+      expect(payment.methodType, 'cash');
+      expect(payment.amount, 200);
+      final item = await (db.select(
+        db.orderItems,
+      )..where((t) => t.orderId.equals(order.id))).getSingle();
+      expect(item.productName, 'Sticker');
+      expect(item.unitPrice, 100);
     });
 
     test('allocates order_no inside the txn: seq increments per device/day',
@@ -292,6 +305,7 @@ void main() {
       expect(await count('payments'), 0);
       expect(await count('stock_events'), 0);
       expect(await saleOutboxCount(), 0);
+      expect(await count('sync_outbox'), 0);
     });
   });
 
@@ -741,6 +755,71 @@ void main() {
         throwsA(anything),
       );
       expect(await count('orders'), 1);
+    });
+  });
+
+  // ------------------------------------------------- outbox dedupe semantics
+
+  group('outbox — same-instant re-enqueue', () {
+    Product product(String name) => Product(
+      id: 'p1',
+      storeId: 'store-1',
+      categoryId: null,
+      name: name,
+      price: 10,
+      barcode: null,
+      imagePath: null,
+      stockQuantity: 0,
+      isActive: true,
+      createdAt: DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 1, 1),
+      deletedAt: null,
+      syncedAt: null,
+    );
+
+    test('enqueue twice at the same instant -> one row, latest payload',
+        () async {
+      await seedStore();
+      // fixed clock -> identical (entity, entity_id, updated_at) -> same id
+      await db.upsertProduct(product('First'),
+          deviceId: 'device-1', storeId: 'store-1');
+      await db.upsertProduct(product('Second'),
+          deviceId: 'device-1', storeId: 'store-1');
+
+      final rows = await (db.select(
+        db.syncOutbox,
+      )..where((t) => t.entity.equals('products'))).get();
+      expect(rows.length, 1);
+      expect(rows.single.payload, contains('Second'));
+      expect(rows.single.syncedAt, isNull);
+    });
+
+    test('enqueue after sent -> no duplicate, sent row not resurrected or '
+        'overwritten, backoff state kept', () async {
+      await seedStore();
+      await db.upsertProduct(product('First'),
+          deviceId: 'device-1', storeId: 'store-1');
+      final first = (await (db.select(
+        db.syncOutbox,
+      )..where((t) => t.entity.equals('products'))).get())
+          .single;
+      expect(first.syncedAt, isNull);
+
+      // attempts=1, then ack it (sent).
+      await db.markOutboxFailed(first.id, 'boom');
+      await db.markOutboxSynced(first.id);
+
+      // Same-instant re-enqueue of the same deterministic id.
+      await db.upsertProduct(product('Third'),
+          deviceId: 'device-1', storeId: 'store-1');
+
+      final rows = await (db.select(
+        db.syncOutbox,
+      )..where((t) => t.entity.equals('products'))).get();
+      expect(rows.length, 1); // no duplicate
+      expect(rows.single.syncedAt, isNotNull); // not resurrected
+      expect(rows.single.payload, contains('First')); // payload unchanged
+      expect(rows.single.attempts, 1); // backoff state preserved
     });
   });
 }

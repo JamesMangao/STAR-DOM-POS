@@ -1,0 +1,18 @@
+{
+  "name": "stardom-pos-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "STAR:DOM POS migration scripts: export, db-facts, reset, import, verify.",
+  "type": "commonjs",
+  "dependencies": {
+    "pg": "^8.23.1",
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "scripts": {
+    "export": "node export.js",
+    "facts": "node db-facts.js",
+    "reset": "node reset.js",
+    "import": "node import.js",
+    "verify": "node verify.js"
+  }
+}
