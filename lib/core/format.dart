@@ -14,13 +14,13 @@ class Fmt {
     final y = now.year % 100;
     final m = now.month;
     final d = now.day;
-    final ymd = '${y.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}${d.toString().padLeft(2, '0')}';
+    final ymd =
+        '${y.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}${d.toString().padLeft(2, '0')}';
     return '$deviceCode-$ymd-${seq.toString().padLeft(3, '0')}';
   }
 
   /// YYMMDD key for per-day order sequences.
-  static String dayKey(DateTime now) =>
-      orderNo('', now, 0).split('-')[1];
+  static String dayKey(DateTime now) => orderNo('', now, 0).split('-')[1];
 
   static String time(DateTime t) => DateFormat('h:mm a').format(t);
 

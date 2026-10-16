@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'api.dart';
 import 'db.dart';
 import 'logic.dart';
-import 'models.dart';
 
 enum SyncState { synced, offline, failed }
 
@@ -58,7 +57,10 @@ class SyncEngine {
           continue;
         }
         try {
-          await Api.instance.pushRow(e.entity, jsonDecode(e.payload) as Map<String, dynamic>);
+          await Api.instance.pushRow(
+            e.entity,
+            jsonDecode(e.payload) as Map<String, dynamic>,
+          );
           await _db.markOutboxSynced(e.id);
         } catch (err) {
           await _db.markOutboxFailed(e.id, err.toString());
@@ -74,10 +76,15 @@ class SyncEngine {
   /// Pull delta since last_sync_at. New device: full pull.
   Future<void> pull({String? storeId}) async {
     if (!Api.instance.isReady) return;
-    final sid = storeId ?? _storeId;
-    final device = await _db.deviceById(_deviceId);
+    final device = _deviceId != null ? await _db.deviceById(_deviceId!) : null;
     final since = device?.lastSyncAt;
-    for (final table in ['products', 'categories', 'payment_methods', 'settings']) {
+    for (final table in [
+      'products',
+      'categories',
+      'payment_methods',
+      'settings',
+      'order_voids',
+    ]) {
       final rows = await Api.instance.pullRows(table, since: since);
       for (final row in rows) {
         await _applyRemote(table, row);
@@ -87,14 +94,24 @@ class SyncEngine {
   }
 
   Future<void> _applyRemote(String table, Map<String, dynamic> row) async {
+    // A remote void is applied by inserting an order_voids row locally. It
+    // NEVER mutates the order — voided stays derived (F3).
+    if (table == 'order_voids') {
+      await _db.applyRemoteVoid(row);
+      return;
+    }
+
     final updatedAt = row['updated_at'] == null
         ? null
-        : DateTime.tryParse(row['updated_at'] as String);
+        : DateTime.tryParse(row['updated_at'] as String)?.toUtc();
+    final now = DateTime.now().toUtc();
     switch (table) {
       case 'products':
         final existing = await _db.productById(row['id'] as String);
         if (LastWriteWins.serverWins(
-            localUpdatedAt: existing?.updatedAt, serverUpdatedAt: updatedAt)) {
+          localUpdatedAt: existing?.updatedAt,
+          serverUpdatedAt: updatedAt,
+        )) {
           await _db.upsertProduct(
             Product(
               id: row['id'] as String,
@@ -106,8 +123,12 @@ class SyncEngine {
               imagePath: row['image_path'] as String?,
               stockQuantity: (row['stock_quantity'] as num?)?.toInt() ?? 0,
               isActive: row['is_active'] as bool? ?? true,
-              createdAt: DateTime.now(),
-              updatedAt: updatedAt,
+              createdAt: updatedAt ?? now,
+              updatedAt: updatedAt ?? now,
+              deletedAt: row['deleted_at'] == null
+                  ? null
+                  : DateTime.tryParse(row['deleted_at'] as String),
+              syncedAt: updatedAt,
             ),
             deviceId: _deviceId ?? '',
             storeId: row['store_id'] as String,
@@ -115,13 +136,21 @@ class SyncEngine {
         }
         break;
       case 'categories':
-        await _db.upsertCategory(Category(
-          id: row['id'] as String,
-          storeId: row['store_id'] as String,
-          name: row['name'] as String,
-          sortOrder: (row['sort_order'] as num?)?.toInt() ?? 0,
-          isActive: row['is_active'] as bool? ?? true,
-        ));
+        await _db.upsertCategory(
+          Category(
+            id: row['id'] as String,
+            storeId: row['store_id'] as String,
+            name: row['name'] as String,
+            sortOrder: (row['sort_order'] as num?)?.toInt() ?? 0,
+            isActive: row['is_active'] as bool? ?? true,
+            createdAt: updatedAt ?? now,
+            updatedAt: updatedAt ?? now,
+            deletedAt: row['deleted_at'] == null
+                ? null
+                : DateTime.tryParse(row['deleted_at'] as String),
+            syncedAt: updatedAt,
+          ),
+        );
         break;
       case 'payment_methods':
         await _db.upsertPaymentMethod(
@@ -137,7 +166,12 @@ class SyncEngine {
             requireReference: row['require_reference'] as bool? ?? false,
             isEnabled: row['is_enabled'] as bool? ?? true,
             sortOrder: (row['sort_order'] as num?)?.toInt() ?? 0,
-            updatedAt: updatedAt,
+            createdAt: updatedAt ?? now,
+            updatedAt: updatedAt ?? now,
+            deletedAt: row['deleted_at'] == null
+                ? null
+                : DateTime.tryParse(row['deleted_at'] as String),
+            syncedAt: updatedAt,
           ),
           deviceId: _deviceId ?? '',
           storeId: row['store_id'] as String,

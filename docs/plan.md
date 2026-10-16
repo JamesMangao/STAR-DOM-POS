@@ -140,27 +140,48 @@ Seeded: Cash, GCash, GoTyme (from website PaymentSettings).
 | status | text check ('completed','voided') |
 | created_at, updated_at, synced_at | |
 
-Void = `order_voids` row + status flip. Never UPDATE/DELETE the order row.
+`status` is written ONCE at insert (`'completed'`) and never updated. Void is
+an `order_voids` row + reversal `stock_events`; the order row is NEVER
+UPDATED or DELETED. **Voided is DERIVED**: `exists (select 1 from order_voids
+where order_id = orders.id)`. Unique: `(order_no)` and `(store_id, order_no)`.
 
 ### 3.7 `order_items` (append-only)
 | id uuid pk | order_id uuid fk | product_id uuid fk null | product_name text (snapshot) | unit_price numeric(10,2) | quantity int | line_total numeric(10,2) | created_at |
 
-### 3.8 `order_voids` (append-only events)
-| id uuid pk | order_id uuid fk | device_id uuid fk | reason text | created_at |
+### 3.8 `payments` (append-only)
+| id uuid pk | store_id | device_id | order_id uuid fk (unique) | method_id uuid null | method_name text (snapshot) | method_type text (snapshot) | amount numeric(10,2) | amount_received numeric(10,2) null | change_amount numeric(10,2) null | reference_no text | created_at |
+Written in the SAME transaction as the order; `method_name`/`method_type` are
+snapshotted so editing or deleting a PaymentMethod never rewrites an issued
+receipt.
 
-### 3.9 `stock_events` (delta events — computed sum, never absolute overwrite)
-| id uuid pk | store_id | product_id uuid fk | delta int (negative = sale) | reason text ('sale','adjustment','import','sync') | order_id uuid fk null | device_id | created_at |
+### 3.9 `order_voids` (append-only events)
+| id uuid pk | order_id uuid fk (unique) | device_id uuid fk | reason text | voided_at | created_at |
+Unique on `order_id` — a second void inserts nothing and returns a clear
+result instead of a second row or a second stock reversal.
 
-### 3.10 `shifts`
-| id uuid pk | store_id | device_id | opened_at | closed_at null | cash_expected numeric null | cash_actual numeric null | variance numeric null | closed_by uuid | created_at, updated_at, synced_at |
+### 3.10 `stock_events` (delta events — computed sum, never absolute overwrite)
+| id uuid pk | store_id | product_id uuid fk | delta int (negative = sale) | reason text ('sale','adjustment','import','sync','void') | order_id uuid fk null | device_id | created_at |
 
-### 3.11 `sync_outbox`
-| id uuid pk (event id = dedupe key) | store_id | device_id | entity text | entity_id uuid | op text ('insert','update','delete','void') | payload jsonb | attempts int default 0 | last_error text | created_at, synced_at |
-Index: `(store_id, created_at)`.
+### 3.11 `day_closes` (replaces `shifts`)
+| id uuid pk | store_id | device_id | business_date date | cash_expected numeric null | cash_actual numeric null | variance numeric null | closed_by text null | created_at, updated_at, synced_at |
+Unique `(business_date, device_id)` — closing the same day twice updates the
+row (last-write-wins), it never duplicates. Expected cash = active (non-voided)
+cash orders for the day, i.e. **cash orders minus voids**.
 
-### 3.12 `settings`
-| store_id uuid fk | key text | value jsonb | updated_at, synced_at | pk (store_id, key) |
+> `shifts` was removed: nothing referenced it (no screen, no logic — only a
+deleted test), and the mockup has no shift flow. `day_closes` replaces it.
+
+### 3.12 `sync_outbox`
+| id uuid pk (event id = dedupe key) | store_id | device_id | entity text | entity_id text | op text ('insert','update','delete','void') | payload jsonb | attempts int default 0 | last_error text | created_at, synced_at |
+Index: `(store_id, created_at)`. A sale is ONE row (`entity='sale'`) whose
+payload carries the whole bundle: order + items + payment + stock_events. A
+void is one row (`entity='void'`) with the order_voids row + reversal events.
+
+### 3.13 `settings`
+| store_id uuid fk | key text | value text | updated_at, synced_at | pk (store_id, key) |
 Keys: `receipt_footer`, `printer_name`, `device_disabled_banner`, etc.
+
+**Total: 13 POS tables.**
 
 ---
 
@@ -178,7 +199,9 @@ CREATE POLICY owner_all ON products
 
 - `anon` role: **no policies → zero access**.
 - `authenticated` non-owner: zero rows (subquery returns empty).
-- `orders`/`order_items`/`order_voids`/`stock_events`/`shifts`: same owner-only rule.
+- `orders`/`order_items`/`payments`/`order_voids`/`stock_events`: owner-only
+  **SELECT + INSERT policies only** — with no UPDATE/DELETE policy the
+  append-only rule is enforced at the database, not just in app code.
 - Storage bucket `pos-assets` (**private**): authenticated owner read/write via same store match; app uses **signed URLs** (5 min TTL) for product/QR images. anon: none.
 - Migrations create policies idempotently (`drop policy if exists` + `create policy`).
 
@@ -218,14 +241,14 @@ CREATE POLICY owner_all ON products
 
 | Data | Rule |
 |---|---|
-| orders, order_items | **Append-only.** Never edit/delete. Void = new `order_voids` event referencing order_id + status flip. |
+| orders, order_items, payments | **Append-only.** Never edit/delete. Void = new `order_voids` event referencing order_id; the order row is untouched. |
 | order_voids | Append-only. |
 | stock | **Delta events only** — `stock_events.delta`; current stock = sum. No absolute overwrite. |
 | products, categories, payment_methods, settings | **Last-write-wins by `updated_at`**, soft delete (`deleted_at`). |
 | devices | Register on first launch (UUID + model name + short `device_code`). Rename in Settings. Disable → stops syncing + banner. |
 | order_no | `{device_code}-{YYMMDD}-{seq}` — seq = count of that device's orders that day + 1, unique per store. |
 | payment_methods.qr_image | Stored in `pos-assets`, cached local, re-downloaded on new device. |
-| Reports | Aggregate **all devices**. Cash count + Close Day per device/shift; store-level summary on top. |
+| Reports | Aggregate **all devices**. Cash count + Close Day per device/day (day_closes); store-level summary on top. |
 
 ---
 

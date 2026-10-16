@@ -10,7 +10,6 @@ class SilentAuth {
   SilentAuth._();
   static final SilentAuth instance = SilentAuth._();
 
-  static const _kSession = 'supabase_session';
   static const _kUserId = 'owner_user_id';
 
   final _storage = const FlutterSecureStorage();

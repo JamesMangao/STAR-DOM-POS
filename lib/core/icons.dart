@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 /// Material Symbols Outlined glyphs (one per action, never emoji).
@@ -46,6 +45,4 @@ class AppIcons {
   static const wallet = Symbols.account_balance_wallet;
   static const bank = Symbols.account_balance;
   static const device = Symbols.devices;
-
-  static IconData build(Symbols s) => s;
 }

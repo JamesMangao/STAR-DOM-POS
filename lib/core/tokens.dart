@@ -94,7 +94,10 @@ class AppShadows {
     BoxShadow(color: Color(0x0F3C1410), blurRadius: 6, offset: Offset(0, 2)),
   ];
   static const stamp = BoxShadow(
-    color: AppColors.ink, blurRadius: 0, offset: Offset(2, 2));
+    color: AppColors.ink,
+    blurRadius: 0,
+    offset: Offset(2, 2),
+  );
   static const focusRing = [
     BoxShadow(color: Color(0xFFFFFFFF), blurRadius: 0, spreadRadius: 2),
     BoxShadow(color: AppColors.yellow, blurRadius: 0, spreadRadius: 4),

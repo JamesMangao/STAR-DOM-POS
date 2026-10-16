@@ -4832,6 +4832,723 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItem> {
   }
 }
 
+class $PaymentsTable extends Payments with TableInfo<$PaymentsTable, Payment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PaymentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _orderIdMeta = const VerificationMeta(
+    'orderId',
+  );
+  @override
+  late final GeneratedColumn<String> orderId = GeneratedColumn<String>(
+    'order_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _methodIdMeta = const VerificationMeta(
+    'methodId',
+  );
+  @override
+  late final GeneratedColumn<String> methodId = GeneratedColumn<String>(
+    'method_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _methodNameMeta = const VerificationMeta(
+    'methodName',
+  );
+  @override
+  late final GeneratedColumn<String> methodName = GeneratedColumn<String>(
+    'method_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _methodTypeMeta = const VerificationMeta(
+    'methodType',
+  );
+  @override
+  late final GeneratedColumn<String> methodType = GeneratedColumn<String>(
+    'method_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountReceivedMeta = const VerificationMeta(
+    'amountReceived',
+  );
+  @override
+  late final GeneratedColumn<double> amountReceived = GeneratedColumn<double>(
+    'amount_received',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _changeAmountMeta = const VerificationMeta(
+    'changeAmount',
+  );
+  @override
+  late final GeneratedColumn<double> changeAmount = GeneratedColumn<double>(
+    'change_amount',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _referenceNoMeta = const VerificationMeta(
+    'referenceNo',
+  );
+  @override
+  late final GeneratedColumn<String> referenceNo = GeneratedColumn<String>(
+    'reference_no',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    storeId,
+    deviceId,
+    orderId,
+    methodId,
+    methodName,
+    methodType,
+    amount,
+    amountReceived,
+    changeAmount,
+    referenceNo,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'payments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Payment> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('order_id')) {
+      context.handle(
+        _orderIdMeta,
+        orderId.isAcceptableOrUnknown(data['order_id']!, _orderIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_orderIdMeta);
+    }
+    if (data.containsKey('method_id')) {
+      context.handle(
+        _methodIdMeta,
+        methodId.isAcceptableOrUnknown(data['method_id']!, _methodIdMeta),
+      );
+    }
+    if (data.containsKey('method_name')) {
+      context.handle(
+        _methodNameMeta,
+        methodName.isAcceptableOrUnknown(data['method_name']!, _methodNameMeta),
+      );
+    }
+    if (data.containsKey('method_type')) {
+      context.handle(
+        _methodTypeMeta,
+        methodType.isAcceptableOrUnknown(data['method_type']!, _methodTypeMeta),
+      );
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('amount_received')) {
+      context.handle(
+        _amountReceivedMeta,
+        amountReceived.isAcceptableOrUnknown(
+          data['amount_received']!,
+          _amountReceivedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('change_amount')) {
+      context.handle(
+        _changeAmountMeta,
+        changeAmount.isAcceptableOrUnknown(
+          data['change_amount']!,
+          _changeAmountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reference_no')) {
+      context.handle(
+        _referenceNoMeta,
+        referenceNo.isAcceptableOrUnknown(
+          data['reference_no']!,
+          _referenceNoMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Payment map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Payment(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      orderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}order_id'],
+      )!,
+      methodId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method_id'],
+      ),
+      methodName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method_name'],
+      )!,
+      methodType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method_type'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount'],
+      )!,
+      amountReceived: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount_received'],
+      ),
+      changeAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}change_amount'],
+      ),
+      referenceNo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference_no'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PaymentsTable createAlias(String alias) {
+    return $PaymentsTable(attachedDatabase, alias);
+  }
+}
+
+class Payment extends DataClass implements Insertable<Payment> {
+  final String id;
+  final String storeId;
+  final String deviceId;
+  final String orderId;
+  final String? methodId;
+  final String methodName;
+  final String methodType;
+  final double amount;
+  final double? amountReceived;
+  final double? changeAmount;
+  final String referenceNo;
+  final DateTime createdAt;
+  const Payment({
+    required this.id,
+    required this.storeId,
+    required this.deviceId,
+    required this.orderId,
+    this.methodId,
+    required this.methodName,
+    required this.methodType,
+    required this.amount,
+    this.amountReceived,
+    this.changeAmount,
+    required this.referenceNo,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['store_id'] = Variable<String>(storeId);
+    map['device_id'] = Variable<String>(deviceId);
+    map['order_id'] = Variable<String>(orderId);
+    if (!nullToAbsent || methodId != null) {
+      map['method_id'] = Variable<String>(methodId);
+    }
+    map['method_name'] = Variable<String>(methodName);
+    map['method_type'] = Variable<String>(methodType);
+    map['amount'] = Variable<double>(amount);
+    if (!nullToAbsent || amountReceived != null) {
+      map['amount_received'] = Variable<double>(amountReceived);
+    }
+    if (!nullToAbsent || changeAmount != null) {
+      map['change_amount'] = Variable<double>(changeAmount);
+    }
+    map['reference_no'] = Variable<String>(referenceNo);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PaymentsCompanion toCompanion(bool nullToAbsent) {
+    return PaymentsCompanion(
+      id: Value(id),
+      storeId: Value(storeId),
+      deviceId: Value(deviceId),
+      orderId: Value(orderId),
+      methodId: methodId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(methodId),
+      methodName: Value(methodName),
+      methodType: Value(methodType),
+      amount: Value(amount),
+      amountReceived: amountReceived == null && nullToAbsent
+          ? const Value.absent()
+          : Value(amountReceived),
+      changeAmount: changeAmount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(changeAmount),
+      referenceNo: Value(referenceNo),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Payment.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Payment(
+      id: serializer.fromJson<String>(json['id']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      orderId: serializer.fromJson<String>(json['orderId']),
+      methodId: serializer.fromJson<String?>(json['methodId']),
+      methodName: serializer.fromJson<String>(json['methodName']),
+      methodType: serializer.fromJson<String>(json['methodType']),
+      amount: serializer.fromJson<double>(json['amount']),
+      amountReceived: serializer.fromJson<double?>(json['amountReceived']),
+      changeAmount: serializer.fromJson<double?>(json['changeAmount']),
+      referenceNo: serializer.fromJson<String>(json['referenceNo']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'storeId': serializer.toJson<String>(storeId),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'orderId': serializer.toJson<String>(orderId),
+      'methodId': serializer.toJson<String?>(methodId),
+      'methodName': serializer.toJson<String>(methodName),
+      'methodType': serializer.toJson<String>(methodType),
+      'amount': serializer.toJson<double>(amount),
+      'amountReceived': serializer.toJson<double?>(amountReceived),
+      'changeAmount': serializer.toJson<double?>(changeAmount),
+      'referenceNo': serializer.toJson<String>(referenceNo),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Payment copyWith({
+    String? id,
+    String? storeId,
+    String? deviceId,
+    String? orderId,
+    Value<String?> methodId = const Value.absent(),
+    String? methodName,
+    String? methodType,
+    double? amount,
+    Value<double?> amountReceived = const Value.absent(),
+    Value<double?> changeAmount = const Value.absent(),
+    String? referenceNo,
+    DateTime? createdAt,
+  }) => Payment(
+    id: id ?? this.id,
+    storeId: storeId ?? this.storeId,
+    deviceId: deviceId ?? this.deviceId,
+    orderId: orderId ?? this.orderId,
+    methodId: methodId.present ? methodId.value : this.methodId,
+    methodName: methodName ?? this.methodName,
+    methodType: methodType ?? this.methodType,
+    amount: amount ?? this.amount,
+    amountReceived: amountReceived.present
+        ? amountReceived.value
+        : this.amountReceived,
+    changeAmount: changeAmount.present ? changeAmount.value : this.changeAmount,
+    referenceNo: referenceNo ?? this.referenceNo,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Payment copyWithCompanion(PaymentsCompanion data) {
+    return Payment(
+      id: data.id.present ? data.id.value : this.id,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      orderId: data.orderId.present ? data.orderId.value : this.orderId,
+      methodId: data.methodId.present ? data.methodId.value : this.methodId,
+      methodName: data.methodName.present
+          ? data.methodName.value
+          : this.methodName,
+      methodType: data.methodType.present
+          ? data.methodType.value
+          : this.methodType,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      amountReceived: data.amountReceived.present
+          ? data.amountReceived.value
+          : this.amountReceived,
+      changeAmount: data.changeAmount.present
+          ? data.changeAmount.value
+          : this.changeAmount,
+      referenceNo: data.referenceNo.present
+          ? data.referenceNo.value
+          : this.referenceNo,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Payment(')
+          ..write('id: $id, ')
+          ..write('storeId: $storeId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('orderId: $orderId, ')
+          ..write('methodId: $methodId, ')
+          ..write('methodName: $methodName, ')
+          ..write('methodType: $methodType, ')
+          ..write('amount: $amount, ')
+          ..write('amountReceived: $amountReceived, ')
+          ..write('changeAmount: $changeAmount, ')
+          ..write('referenceNo: $referenceNo, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    storeId,
+    deviceId,
+    orderId,
+    methodId,
+    methodName,
+    methodType,
+    amount,
+    amountReceived,
+    changeAmount,
+    referenceNo,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Payment &&
+          other.id == this.id &&
+          other.storeId == this.storeId &&
+          other.deviceId == this.deviceId &&
+          other.orderId == this.orderId &&
+          other.methodId == this.methodId &&
+          other.methodName == this.methodName &&
+          other.methodType == this.methodType &&
+          other.amount == this.amount &&
+          other.amountReceived == this.amountReceived &&
+          other.changeAmount == this.changeAmount &&
+          other.referenceNo == this.referenceNo &&
+          other.createdAt == this.createdAt);
+}
+
+class PaymentsCompanion extends UpdateCompanion<Payment> {
+  final Value<String> id;
+  final Value<String> storeId;
+  final Value<String> deviceId;
+  final Value<String> orderId;
+  final Value<String?> methodId;
+  final Value<String> methodName;
+  final Value<String> methodType;
+  final Value<double> amount;
+  final Value<double?> amountReceived;
+  final Value<double?> changeAmount;
+  final Value<String> referenceNo;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PaymentsCompanion({
+    this.id = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.orderId = const Value.absent(),
+    this.methodId = const Value.absent(),
+    this.methodName = const Value.absent(),
+    this.methodType = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.amountReceived = const Value.absent(),
+    this.changeAmount = const Value.absent(),
+    this.referenceNo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PaymentsCompanion.insert({
+    required String id,
+    required String storeId,
+    required String deviceId,
+    required String orderId,
+    this.methodId = const Value.absent(),
+    this.methodName = const Value.absent(),
+    this.methodType = const Value.absent(),
+    required double amount,
+    this.amountReceived = const Value.absent(),
+    this.changeAmount = const Value.absent(),
+    this.referenceNo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       storeId = Value(storeId),
+       deviceId = Value(deviceId),
+       orderId = Value(orderId),
+       amount = Value(amount);
+  static Insertable<Payment> custom({
+    Expression<String>? id,
+    Expression<String>? storeId,
+    Expression<String>? deviceId,
+    Expression<String>? orderId,
+    Expression<String>? methodId,
+    Expression<String>? methodName,
+    Expression<String>? methodType,
+    Expression<double>? amount,
+    Expression<double>? amountReceived,
+    Expression<double>? changeAmount,
+    Expression<String>? referenceNo,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (storeId != null) 'store_id': storeId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (orderId != null) 'order_id': orderId,
+      if (methodId != null) 'method_id': methodId,
+      if (methodName != null) 'method_name': methodName,
+      if (methodType != null) 'method_type': methodType,
+      if (amount != null) 'amount': amount,
+      if (amountReceived != null) 'amount_received': amountReceived,
+      if (changeAmount != null) 'change_amount': changeAmount,
+      if (referenceNo != null) 'reference_no': referenceNo,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PaymentsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? storeId,
+    Value<String>? deviceId,
+    Value<String>? orderId,
+    Value<String?>? methodId,
+    Value<String>? methodName,
+    Value<String>? methodType,
+    Value<double>? amount,
+    Value<double?>? amountReceived,
+    Value<double?>? changeAmount,
+    Value<String>? referenceNo,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PaymentsCompanion(
+      id: id ?? this.id,
+      storeId: storeId ?? this.storeId,
+      deviceId: deviceId ?? this.deviceId,
+      orderId: orderId ?? this.orderId,
+      methodId: methodId ?? this.methodId,
+      methodName: methodName ?? this.methodName,
+      methodType: methodType ?? this.methodType,
+      amount: amount ?? this.amount,
+      amountReceived: amountReceived ?? this.amountReceived,
+      changeAmount: changeAmount ?? this.changeAmount,
+      referenceNo: referenceNo ?? this.referenceNo,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (orderId.present) {
+      map['order_id'] = Variable<String>(orderId.value);
+    }
+    if (methodId.present) {
+      map['method_id'] = Variable<String>(methodId.value);
+    }
+    if (methodName.present) {
+      map['method_name'] = Variable<String>(methodName.value);
+    }
+    if (methodType.present) {
+      map['method_type'] = Variable<String>(methodType.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<double>(amount.value);
+    }
+    if (amountReceived.present) {
+      map['amount_received'] = Variable<double>(amountReceived.value);
+    }
+    if (changeAmount.present) {
+      map['change_amount'] = Variable<double>(changeAmount.value);
+    }
+    if (referenceNo.present) {
+      map['reference_no'] = Variable<String>(referenceNo.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PaymentsCompanion(')
+          ..write('id: $id, ')
+          ..write('storeId: $storeId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('orderId: $orderId, ')
+          ..write('methodId: $methodId, ')
+          ..write('methodName: $methodName, ')
+          ..write('methodType: $methodType, ')
+          ..write('amount: $amount, ')
+          ..write('amountReceived: $amountReceived, ')
+          ..write('changeAmount: $changeAmount, ')
+          ..write('referenceNo: $referenceNo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $OrderVoidsTable extends OrderVoids
     with TableInfo<$OrderVoidsTable, OrderVoid> {
   @override
@@ -4878,6 +5595,17 @@ class $OrderVoidsTable extends OrderVoids
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _voidedAtMeta = const VerificationMeta(
+    'voidedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> voidedAt = GeneratedColumn<DateTime>(
+    'voided_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -4896,6 +5624,7 @@ class $OrderVoidsTable extends OrderVoids
     orderId,
     deviceId,
     reason,
+    voidedAt,
     createdAt,
   ];
   @override
@@ -4939,6 +5668,14 @@ class $OrderVoidsTable extends OrderVoids
     } else if (isInserting) {
       context.missing(_reasonMeta);
     }
+    if (data.containsKey('voided_at')) {
+      context.handle(
+        _voidedAtMeta,
+        voidedAt.isAcceptableOrUnknown(data['voided_at']!, _voidedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_voidedAtMeta);
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -4970,6 +5707,10 @@ class $OrderVoidsTable extends OrderVoids
         DriftSqlType.string,
         data['${effectivePrefix}reason'],
       )!,
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}voided_at'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4988,12 +5729,14 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
   final String orderId;
   final String deviceId;
   final String reason;
+  final DateTime voidedAt;
   final DateTime createdAt;
   const OrderVoid({
     required this.id,
     required this.orderId,
     required this.deviceId,
     required this.reason,
+    required this.voidedAt,
     required this.createdAt,
   });
   @override
@@ -5003,6 +5746,7 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
     map['order_id'] = Variable<String>(orderId);
     map['device_id'] = Variable<String>(deviceId);
     map['reason'] = Variable<String>(reason);
+    map['voided_at'] = Variable<DateTime>(voidedAt);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -5013,6 +5757,7 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
       orderId: Value(orderId),
       deviceId: Value(deviceId),
       reason: Value(reason),
+      voidedAt: Value(voidedAt),
       createdAt: Value(createdAt),
     );
   }
@@ -5027,6 +5772,7 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
       orderId: serializer.fromJson<String>(json['orderId']),
       deviceId: serializer.fromJson<String>(json['deviceId']),
       reason: serializer.fromJson<String>(json['reason']),
+      voidedAt: serializer.fromJson<DateTime>(json['voidedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -5038,6 +5784,7 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
       'orderId': serializer.toJson<String>(orderId),
       'deviceId': serializer.toJson<String>(deviceId),
       'reason': serializer.toJson<String>(reason),
+      'voidedAt': serializer.toJson<DateTime>(voidedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -5047,12 +5794,14 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
     String? orderId,
     String? deviceId,
     String? reason,
+    DateTime? voidedAt,
     DateTime? createdAt,
   }) => OrderVoid(
     id: id ?? this.id,
     orderId: orderId ?? this.orderId,
     deviceId: deviceId ?? this.deviceId,
     reason: reason ?? this.reason,
+    voidedAt: voidedAt ?? this.voidedAt,
     createdAt: createdAt ?? this.createdAt,
   );
   OrderVoid copyWithCompanion(OrderVoidsCompanion data) {
@@ -5061,6 +5810,7 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
       orderId: data.orderId.present ? data.orderId.value : this.orderId,
       deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
       reason: data.reason.present ? data.reason.value : this.reason,
+      voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -5072,13 +5822,15 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
           ..write('orderId: $orderId, ')
           ..write('deviceId: $deviceId, ')
           ..write('reason: $reason, ')
+          ..write('voidedAt: $voidedAt, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, orderId, deviceId, reason, createdAt);
+  int get hashCode =>
+      Object.hash(id, orderId, deviceId, reason, voidedAt, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5087,6 +5839,7 @@ class OrderVoid extends DataClass implements Insertable<OrderVoid> {
           other.orderId == this.orderId &&
           other.deviceId == this.deviceId &&
           other.reason == this.reason &&
+          other.voidedAt == this.voidedAt &&
           other.createdAt == this.createdAt);
 }
 
@@ -5095,6 +5848,7 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
   final Value<String> orderId;
   final Value<String> deviceId;
   final Value<String> reason;
+  final Value<DateTime> voidedAt;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const OrderVoidsCompanion({
@@ -5102,6 +5856,7 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
     this.orderId = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.reason = const Value.absent(),
+    this.voidedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -5110,17 +5865,20 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
     required String orderId,
     required String deviceId,
     required String reason,
+    required DateTime voidedAt,
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        orderId = Value(orderId),
        deviceId = Value(deviceId),
-       reason = Value(reason);
+       reason = Value(reason),
+       voidedAt = Value(voidedAt);
   static Insertable<OrderVoid> custom({
     Expression<String>? id,
     Expression<String>? orderId,
     Expression<String>? deviceId,
     Expression<String>? reason,
+    Expression<DateTime>? voidedAt,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -5129,6 +5887,7 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
       if (orderId != null) 'order_id': orderId,
       if (deviceId != null) 'device_id': deviceId,
       if (reason != null) 'reason': reason,
+      if (voidedAt != null) 'voided_at': voidedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -5139,6 +5898,7 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
     Value<String>? orderId,
     Value<String>? deviceId,
     Value<String>? reason,
+    Value<DateTime>? voidedAt,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -5147,6 +5907,7 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
       orderId: orderId ?? this.orderId,
       deviceId: deviceId ?? this.deviceId,
       reason: reason ?? this.reason,
+      voidedAt: voidedAt ?? this.voidedAt,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -5167,6 +5928,9 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
     }
+    if (voidedAt.present) {
+      map['voided_at'] = Variable<DateTime>(voidedAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -5183,6 +5947,7 @@ class OrderVoidsCompanion extends UpdateCompanion<OrderVoid> {
           ..write('orderId: $orderId, ')
           ..write('deviceId: $deviceId, ')
           ..write('reason: $reason, ')
+          ..write('voidedAt: $voidedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -5698,11 +6463,12 @@ class StockEventsCompanion extends UpdateCompanion<StockEvent> {
   }
 }
 
-class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
+class $DayClosesTable extends DayCloses
+    with TableInfo<$DayClosesTable, DayClose> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $ShiftsTable(this.attachedDatabase, [this._alias]);
+  $DayClosesTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -5734,28 +6500,16 @@ class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _openedAtMeta = const VerificationMeta(
-    'openedAt',
+  static const VerificationMeta _businessDateMeta = const VerificationMeta(
+    'businessDate',
   );
   @override
-  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
-    'opened_at',
+  late final GeneratedColumn<DateTime> businessDate = GeneratedColumn<DateTime>(
+    'business_date',
     aliasedName,
     false,
     type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
-  );
-  static const VerificationMeta _closedAtMeta = const VerificationMeta(
-    'closedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
-    'closed_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
+    requiredDuringInsert: true,
   );
   static const VerificationMeta _cashExpectedMeta = const VerificationMeta(
     'cashExpected',
@@ -5841,8 +6595,7 @@ class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
     id,
     storeId,
     deviceId,
-    openedAt,
-    closedAt,
+    businessDate,
     cashExpected,
     cashActual,
     variance,
@@ -5855,10 +6608,10 @@ class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'shifts';
+  static const String $name = 'day_closes';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Shift> instance, {
+    Insertable<DayClose> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -5884,17 +6637,16 @@ class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
     } else if (isInserting) {
       context.missing(_deviceIdMeta);
     }
-    if (data.containsKey('opened_at')) {
+    if (data.containsKey('business_date')) {
       context.handle(
-        _openedAtMeta,
-        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
+        _businessDateMeta,
+        businessDate.isAcceptableOrUnknown(
+          data['business_date']!,
+          _businessDateMeta,
+        ),
       );
-    }
-    if (data.containsKey('closed_at')) {
-      context.handle(
-        _closedAtMeta,
-        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
-      );
+    } else if (isInserting) {
+      context.missing(_businessDateMeta);
     }
     if (data.containsKey('cash_expected')) {
       context.handle(
@@ -5947,9 +6699,9 @@ class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Shift map(Map<String, dynamic> data, {String? tablePrefix}) {
+  DayClose map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Shift(
+    return DayClose(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -5962,14 +6714,10 @@ class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
         DriftSqlType.string,
         data['${effectivePrefix}device_id'],
       )!,
-      openedAt: attachedDatabase.typeMapping.read(
+      businessDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
-        data['${effectivePrefix}opened_at'],
+        data['${effectivePrefix}business_date'],
       )!,
-      closedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}closed_at'],
-      ),
       cashExpected: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}cash_expected'],
@@ -6002,17 +6750,16 @@ class $ShiftsTable extends Shifts with TableInfo<$ShiftsTable, Shift> {
   }
 
   @override
-  $ShiftsTable createAlias(String alias) {
-    return $ShiftsTable(attachedDatabase, alias);
+  $DayClosesTable createAlias(String alias) {
+    return $DayClosesTable(attachedDatabase, alias);
   }
 }
 
-class Shift extends DataClass implements Insertable<Shift> {
+class DayClose extends DataClass implements Insertable<DayClose> {
   final String id;
   final String storeId;
   final String deviceId;
-  final DateTime openedAt;
-  final DateTime? closedAt;
+  final DateTime businessDate;
   final double? cashExpected;
   final double? cashActual;
   final double? variance;
@@ -6020,12 +6767,11 @@ class Shift extends DataClass implements Insertable<Shift> {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? syncedAt;
-  const Shift({
+  const DayClose({
     required this.id,
     required this.storeId,
     required this.deviceId,
-    required this.openedAt,
-    this.closedAt,
+    required this.businessDate,
     this.cashExpected,
     this.cashActual,
     this.variance,
@@ -6040,10 +6786,7 @@ class Shift extends DataClass implements Insertable<Shift> {
     map['id'] = Variable<String>(id);
     map['store_id'] = Variable<String>(storeId);
     map['device_id'] = Variable<String>(deviceId);
-    map['opened_at'] = Variable<DateTime>(openedAt);
-    if (!nullToAbsent || closedAt != null) {
-      map['closed_at'] = Variable<DateTime>(closedAt);
-    }
+    map['business_date'] = Variable<DateTime>(businessDate);
     if (!nullToAbsent || cashExpected != null) {
       map['cash_expected'] = Variable<double>(cashExpected);
     }
@@ -6064,15 +6807,12 @@ class Shift extends DataClass implements Insertable<Shift> {
     return map;
   }
 
-  ShiftsCompanion toCompanion(bool nullToAbsent) {
-    return ShiftsCompanion(
+  DayClosesCompanion toCompanion(bool nullToAbsent) {
+    return DayClosesCompanion(
       id: Value(id),
       storeId: Value(storeId),
       deviceId: Value(deviceId),
-      openedAt: Value(openedAt),
-      closedAt: closedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(closedAt),
+      businessDate: Value(businessDate),
       cashExpected: cashExpected == null && nullToAbsent
           ? const Value.absent()
           : Value(cashExpected),
@@ -6093,17 +6833,16 @@ class Shift extends DataClass implements Insertable<Shift> {
     );
   }
 
-  factory Shift.fromJson(
+  factory DayClose.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Shift(
+    return DayClose(
       id: serializer.fromJson<String>(json['id']),
       storeId: serializer.fromJson<String>(json['storeId']),
       deviceId: serializer.fromJson<String>(json['deviceId']),
-      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
-      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      businessDate: serializer.fromJson<DateTime>(json['businessDate']),
       cashExpected: serializer.fromJson<double?>(json['cashExpected']),
       cashActual: serializer.fromJson<double?>(json['cashActual']),
       variance: serializer.fromJson<double?>(json['variance']),
@@ -6120,8 +6859,7 @@ class Shift extends DataClass implements Insertable<Shift> {
       'id': serializer.toJson<String>(id),
       'storeId': serializer.toJson<String>(storeId),
       'deviceId': serializer.toJson<String>(deviceId),
-      'openedAt': serializer.toJson<DateTime>(openedAt),
-      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'businessDate': serializer.toJson<DateTime>(businessDate),
       'cashExpected': serializer.toJson<double?>(cashExpected),
       'cashActual': serializer.toJson<double?>(cashActual),
       'variance': serializer.toJson<double?>(variance),
@@ -6132,12 +6870,11 @@ class Shift extends DataClass implements Insertable<Shift> {
     };
   }
 
-  Shift copyWith({
+  DayClose copyWith({
     String? id,
     String? storeId,
     String? deviceId,
-    DateTime? openedAt,
-    Value<DateTime?> closedAt = const Value.absent(),
+    DateTime? businessDate,
     Value<double?> cashExpected = const Value.absent(),
     Value<double?> cashActual = const Value.absent(),
     Value<double?> variance = const Value.absent(),
@@ -6145,12 +6882,11 @@ class Shift extends DataClass implements Insertable<Shift> {
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> syncedAt = const Value.absent(),
-  }) => Shift(
+  }) => DayClose(
     id: id ?? this.id,
     storeId: storeId ?? this.storeId,
     deviceId: deviceId ?? this.deviceId,
-    openedAt: openedAt ?? this.openedAt,
-    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    businessDate: businessDate ?? this.businessDate,
     cashExpected: cashExpected.present ? cashExpected.value : this.cashExpected,
     cashActual: cashActual.present ? cashActual.value : this.cashActual,
     variance: variance.present ? variance.value : this.variance,
@@ -6159,13 +6895,14 @@ class Shift extends DataClass implements Insertable<Shift> {
     updatedAt: updatedAt ?? this.updatedAt,
     syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
   );
-  Shift copyWithCompanion(ShiftsCompanion data) {
-    return Shift(
+  DayClose copyWithCompanion(DayClosesCompanion data) {
+    return DayClose(
       id: data.id.present ? data.id.value : this.id,
       storeId: data.storeId.present ? data.storeId.value : this.storeId,
       deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
-      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
-      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      businessDate: data.businessDate.present
+          ? data.businessDate.value
+          : this.businessDate,
       cashExpected: data.cashExpected.present
           ? data.cashExpected.value
           : this.cashExpected,
@@ -6182,12 +6919,11 @@ class Shift extends DataClass implements Insertable<Shift> {
 
   @override
   String toString() {
-    return (StringBuffer('Shift(')
+    return (StringBuffer('DayClose(')
           ..write('id: $id, ')
           ..write('storeId: $storeId, ')
           ..write('deviceId: $deviceId, ')
-          ..write('openedAt: $openedAt, ')
-          ..write('closedAt: $closedAt, ')
+          ..write('businessDate: $businessDate, ')
           ..write('cashExpected: $cashExpected, ')
           ..write('cashActual: $cashActual, ')
           ..write('variance: $variance, ')
@@ -6204,8 +6940,7 @@ class Shift extends DataClass implements Insertable<Shift> {
     id,
     storeId,
     deviceId,
-    openedAt,
-    closedAt,
+    businessDate,
     cashExpected,
     cashActual,
     variance,
@@ -6217,12 +6952,11 @@ class Shift extends DataClass implements Insertable<Shift> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Shift &&
+      (other is DayClose &&
           other.id == this.id &&
           other.storeId == this.storeId &&
           other.deviceId == this.deviceId &&
-          other.openedAt == this.openedAt &&
-          other.closedAt == this.closedAt &&
+          other.businessDate == this.businessDate &&
           other.cashExpected == this.cashExpected &&
           other.cashActual == this.cashActual &&
           other.variance == this.variance &&
@@ -6232,12 +6966,11 @@ class Shift extends DataClass implements Insertable<Shift> {
           other.syncedAt == this.syncedAt);
 }
 
-class ShiftsCompanion extends UpdateCompanion<Shift> {
+class DayClosesCompanion extends UpdateCompanion<DayClose> {
   final Value<String> id;
   final Value<String> storeId;
   final Value<String> deviceId;
-  final Value<DateTime> openedAt;
-  final Value<DateTime?> closedAt;
+  final Value<DateTime> businessDate;
   final Value<double?> cashExpected;
   final Value<double?> cashActual;
   final Value<double?> variance;
@@ -6246,12 +6979,11 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
   final Value<DateTime> updatedAt;
   final Value<DateTime?> syncedAt;
   final Value<int> rowid;
-  const ShiftsCompanion({
+  const DayClosesCompanion({
     this.id = const Value.absent(),
     this.storeId = const Value.absent(),
     this.deviceId = const Value.absent(),
-    this.openedAt = const Value.absent(),
-    this.closedAt = const Value.absent(),
+    this.businessDate = const Value.absent(),
     this.cashExpected = const Value.absent(),
     this.cashActual = const Value.absent(),
     this.variance = const Value.absent(),
@@ -6261,12 +6993,11 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
     this.syncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  ShiftsCompanion.insert({
+  DayClosesCompanion.insert({
     required String id,
     required String storeId,
     required String deviceId,
-    this.openedAt = const Value.absent(),
-    this.closedAt = const Value.absent(),
+    required DateTime businessDate,
     this.cashExpected = const Value.absent(),
     this.cashActual = const Value.absent(),
     this.variance = const Value.absent(),
@@ -6277,13 +7008,13 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        storeId = Value(storeId),
-       deviceId = Value(deviceId);
-  static Insertable<Shift> custom({
+       deviceId = Value(deviceId),
+       businessDate = Value(businessDate);
+  static Insertable<DayClose> custom({
     Expression<String>? id,
     Expression<String>? storeId,
     Expression<String>? deviceId,
-    Expression<DateTime>? openedAt,
-    Expression<DateTime>? closedAt,
+    Expression<DateTime>? businessDate,
     Expression<double>? cashExpected,
     Expression<double>? cashActual,
     Expression<double>? variance,
@@ -6297,8 +7028,7 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
       if (id != null) 'id': id,
       if (storeId != null) 'store_id': storeId,
       if (deviceId != null) 'device_id': deviceId,
-      if (openedAt != null) 'opened_at': openedAt,
-      if (closedAt != null) 'closed_at': closedAt,
+      if (businessDate != null) 'business_date': businessDate,
       if (cashExpected != null) 'cash_expected': cashExpected,
       if (cashActual != null) 'cash_actual': cashActual,
       if (variance != null) 'variance': variance,
@@ -6310,12 +7040,11 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
     });
   }
 
-  ShiftsCompanion copyWith({
+  DayClosesCompanion copyWith({
     Value<String>? id,
     Value<String>? storeId,
     Value<String>? deviceId,
-    Value<DateTime>? openedAt,
-    Value<DateTime?>? closedAt,
+    Value<DateTime>? businessDate,
     Value<double?>? cashExpected,
     Value<double?>? cashActual,
     Value<double?>? variance,
@@ -6325,12 +7054,11 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
     Value<DateTime?>? syncedAt,
     Value<int>? rowid,
   }) {
-    return ShiftsCompanion(
+    return DayClosesCompanion(
       id: id ?? this.id,
       storeId: storeId ?? this.storeId,
       deviceId: deviceId ?? this.deviceId,
-      openedAt: openedAt ?? this.openedAt,
-      closedAt: closedAt ?? this.closedAt,
+      businessDate: businessDate ?? this.businessDate,
       cashExpected: cashExpected ?? this.cashExpected,
       cashActual: cashActual ?? this.cashActual,
       variance: variance ?? this.variance,
@@ -6354,11 +7082,8 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
     if (deviceId.present) {
       map['device_id'] = Variable<String>(deviceId.value);
     }
-    if (openedAt.present) {
-      map['opened_at'] = Variable<DateTime>(openedAt.value);
-    }
-    if (closedAt.present) {
-      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    if (businessDate.present) {
+      map['business_date'] = Variable<DateTime>(businessDate.value);
     }
     if (cashExpected.present) {
       map['cash_expected'] = Variable<double>(cashExpected.value);
@@ -6389,12 +7114,11 @@ class ShiftsCompanion extends UpdateCompanion<Shift> {
 
   @override
   String toString() {
-    return (StringBuffer('ShiftsCompanion(')
+    return (StringBuffer('DayClosesCompanion(')
           ..write('id: $id, ')
           ..write('storeId: $storeId, ')
           ..write('deviceId: $deviceId, ')
-          ..write('openedAt: $openedAt, ')
-          ..write('closedAt: $closedAt, ')
+          ..write('businessDate: $businessDate, ')
           ..write('cashExpected: $cashExpected, ')
           ..write('cashActual: $cashActual, ')
           ..write('variance: $variance, ')
@@ -7426,9 +8150,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
   late final $OrdersTable orders = $OrdersTable(this);
   late final $OrderItemsTable orderItems = $OrderItemsTable(this);
+  late final $PaymentsTable payments = $PaymentsTable(this);
   late final $OrderVoidsTable orderVoids = $OrderVoidsTable(this);
   late final $StockEventsTable stockEvents = $StockEventsTable(this);
-  late final $ShiftsTable shifts = $ShiftsTable(this);
+  late final $DayClosesTable dayCloses = $DayClosesTable(this);
   late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
   @override
@@ -7443,44 +8168,47 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     paymentMethods,
     orders,
     orderItems,
+    payments,
     orderVoids,
     stockEvents,
-    shifts,
+    dayCloses,
     syncOutbox,
     settings,
   ];
 }
 
-typedef $$StoresTableCreateCompanionBuilder = StoresCompanion Function({
-  required String id,
-  required String name,
-  required String tagline,
-  required String ownerId,
-  required String receiptName,
-  required String receiptTin,
-  required String receiptAddress,
-  required String receiptAccreditation,
-  required String receiptFooter,
-  required String currency,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<int> rowid,
-});
-typedef $$StoresTableUpdateCompanionBuilder = StoresCompanion Function({
-  Value<String> id,
-  Value<String> name,
-  Value<String> tagline,
-  Value<String> ownerId,
-  Value<String> receiptName,
-  Value<String> receiptTin,
-  Value<String> receiptAddress,
-  Value<String> receiptAccreditation,
-  Value<String> receiptFooter,
-  Value<String> currency,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<int> rowid,
-});
+typedef $$StoresTableCreateCompanionBuilder =
+    StoresCompanion Function({
+      required String id,
+      required String name,
+      required String tagline,
+      required String ownerId,
+      required String receiptName,
+      required String receiptTin,
+      required String receiptAddress,
+      required String receiptAccreditation,
+      required String receiptFooter,
+      required String currency,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$StoresTableUpdateCompanionBuilder =
+    StoresCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> tagline,
+      Value<String> ownerId,
+      Value<String> receiptName,
+      Value<String> receiptTin,
+      Value<String> receiptAddress,
+      Value<String> receiptAccreditation,
+      Value<String> receiptFooter,
+      Value<String> currency,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
 
 class $$StoresTableFilterComposer
     extends Composer<_$AppDatabase, $StoresTable> {
@@ -7765,16 +8493,7 @@ class $$StoresTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$StoresTable, Store>(table),
-                  BaseReferences<_$AppDatabase, $StoresTable, Store>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -7795,28 +8514,30 @@ typedef $$StoresTableProcessedTableManager =
       Store,
       PrefetchHooks Function()
     >;
-typedef $$DevicesTableCreateCompanionBuilder = DevicesCompanion Function({
-  required String id,
-  required String storeId,
-  required String deviceName,
-  required String deviceCode,
-  Value<bool> isActive,
-  Value<DateTime?> lastSyncAt,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<int> rowid,
-});
-typedef $$DevicesTableUpdateCompanionBuilder = DevicesCompanion Function({
-  Value<String> id,
-  Value<String> storeId,
-  Value<String> deviceName,
-  Value<String> deviceCode,
-  Value<bool> isActive,
-  Value<DateTime?> lastSyncAt,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<int> rowid,
-});
+typedef $$DevicesTableCreateCompanionBuilder =
+    DevicesCompanion Function({
+      required String id,
+      required String storeId,
+      required String deviceName,
+      required String deviceCode,
+      Value<bool> isActive,
+      Value<DateTime?> lastSyncAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$DevicesTableUpdateCompanionBuilder =
+    DevicesCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> deviceName,
+      Value<String> deviceCode,
+      Value<bool> isActive,
+      Value<DateTime?> lastSyncAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
 
 class $$DevicesTableFilterComposer
     extends Composer<_$AppDatabase, $DevicesTable> {
@@ -8029,16 +8750,7 @@ class $$DevicesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$DevicesTable, Device>(table),
-                  BaseReferences<_$AppDatabase, $DevicesTable, Device>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -8059,30 +8771,32 @@ typedef $$DevicesTableProcessedTableManager =
       Device,
       PrefetchHooks Function()
     >;
-typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
-  required String id,
-  required String storeId,
-  required String name,
-  Value<int> sortOrder,
-  Value<bool> isActive,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> deletedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
-typedef $$CategoriesTableUpdateCompanionBuilder = CategoriesCompanion Function({
-  Value<String> id,
-  Value<String> storeId,
-  Value<String> name,
-  Value<int> sortOrder,
-  Value<bool> isActive,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> deletedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
+typedef $$CategoriesTableCreateCompanionBuilder =
+    CategoriesCompanion Function({
+      required String id,
+      required String storeId,
+      required String name,
+      Value<int> sortOrder,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
+typedef $$CategoriesTableUpdateCompanionBuilder =
+    CategoriesCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> name,
+      Value<int> sortOrder,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
 
 class $$CategoriesTableFilterComposer
     extends Composer<_$AppDatabase, $CategoriesTable> {
@@ -8306,16 +9020,7 @@ class $$CategoriesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$CategoriesTable, Category>(table),
-                  BaseReferences<_$AppDatabase, $CategoriesTable, Category>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -8336,38 +9041,40 @@ typedef $$CategoriesTableProcessedTableManager =
       Category,
       PrefetchHooks Function()
     >;
-typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
-  required String id,
-  required String storeId,
-  Value<String?> categoryId,
-  required String name,
-  required double price,
-  Value<String?> barcode,
-  Value<String?> imagePath,
-  Value<int> stockQuantity,
-  Value<bool> isActive,
-  Value<DateTime> createdAt,
-  required DateTime updatedAt,
-  Value<DateTime?> deletedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
-typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
-  Value<String> id,
-  Value<String> storeId,
-  Value<String?> categoryId,
-  Value<String> name,
-  Value<double> price,
-  Value<String?> barcode,
-  Value<String?> imagePath,
-  Value<int> stockQuantity,
-  Value<bool> isActive,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> deletedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
+typedef $$ProductsTableCreateCompanionBuilder =
+    ProductsCompanion Function({
+      required String id,
+      required String storeId,
+      Value<String?> categoryId,
+      required String name,
+      required double price,
+      Value<String?> barcode,
+      Value<String?> imagePath,
+      Value<int> stockQuantity,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      required DateTime updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
+typedef $$ProductsTableUpdateCompanionBuilder =
+    ProductsCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String?> categoryId,
+      Value<String> name,
+      Value<double> price,
+      Value<String?> barcode,
+      Value<String?> imagePath,
+      Value<int> stockQuantity,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> deletedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
 
 class $$ProductsTableFilterComposer
     extends Composer<_$AppDatabase, $ProductsTable> {
@@ -8663,16 +9370,7 @@ class $$ProductsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$ProductsTable, Product>(table),
-                  BaseReferences<_$AppDatabase, $ProductsTable, Product>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9069,16 +9767,7 @@ class $$PaymentMethodsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$PaymentMethodsTable, PaymentMethod>(table),
-                  BaseReferences<
-                    _$AppDatabase,
-                    $PaymentMethodsTable,
-                    PaymentMethod
-                  >(db, table, e),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9102,44 +9791,46 @@ typedef $$PaymentMethodsTableProcessedTableManager =
       PaymentMethod,
       PrefetchHooks Function()
     >;
-typedef $$OrdersTableCreateCompanionBuilder = OrdersCompanion Function({
-  required String id,
-  required String storeId,
-  required String deviceId,
-  required String orderNo,
-  Value<double> subtotal,
-  Value<double> discount,
-  required double total,
-  Value<String> note,
-  Value<String?> paymentMethodId,
-  Value<double?> amountReceived,
-  Value<double?> changeAmount,
-  Value<String> referenceNo,
-  Value<String> status,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
-typedef $$OrdersTableUpdateCompanionBuilder = OrdersCompanion Function({
-  Value<String> id,
-  Value<String> storeId,
-  Value<String> deviceId,
-  Value<String> orderNo,
-  Value<double> subtotal,
-  Value<double> discount,
-  Value<double> total,
-  Value<String> note,
-  Value<String?> paymentMethodId,
-  Value<double?> amountReceived,
-  Value<double?> changeAmount,
-  Value<String> referenceNo,
-  Value<String> status,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
+typedef $$OrdersTableCreateCompanionBuilder =
+    OrdersCompanion Function({
+      required String id,
+      required String storeId,
+      required String deviceId,
+      required String orderNo,
+      Value<double> subtotal,
+      Value<double> discount,
+      required double total,
+      Value<String> note,
+      Value<String?> paymentMethodId,
+      Value<double?> amountReceived,
+      Value<double?> changeAmount,
+      Value<String> referenceNo,
+      Value<String> status,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
+typedef $$OrdersTableUpdateCompanionBuilder =
+    OrdersCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> deviceId,
+      Value<String> orderNo,
+      Value<double> subtotal,
+      Value<double> discount,
+      Value<double> total,
+      Value<String> note,
+      Value<String?> paymentMethodId,
+      Value<double?> amountReceived,
+      Value<double?> changeAmount,
+      Value<String> referenceNo,
+      Value<String> status,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
 
 class $$OrdersTableFilterComposer
     extends Composer<_$AppDatabase, $OrdersTable> {
@@ -9490,16 +10181,7 @@ class $$OrdersTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$OrdersTable, Order>(table),
-                  BaseReferences<_$AppDatabase, $OrdersTable, Order>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9520,28 +10202,30 @@ typedef $$OrdersTableProcessedTableManager =
       Order,
       PrefetchHooks Function()
     >;
-typedef $$OrderItemsTableCreateCompanionBuilder = OrderItemsCompanion Function({
-  required String id,
-  required String orderId,
-  Value<String?> productId,
-  required String productName,
-  required double unitPrice,
-  required int quantity,
-  required double lineTotal,
-  Value<DateTime> createdAt,
-  Value<int> rowid,
-});
-typedef $$OrderItemsTableUpdateCompanionBuilder = OrderItemsCompanion Function({
-  Value<String> id,
-  Value<String> orderId,
-  Value<String?> productId,
-  Value<String> productName,
-  Value<double> unitPrice,
-  Value<int> quantity,
-  Value<double> lineTotal,
-  Value<DateTime> createdAt,
-  Value<int> rowid,
-});
+typedef $$OrderItemsTableCreateCompanionBuilder =
+    OrderItemsCompanion Function({
+      required String id,
+      required String orderId,
+      Value<String?> productId,
+      required String productName,
+      required double unitPrice,
+      required int quantity,
+      required double lineTotal,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$OrderItemsTableUpdateCompanionBuilder =
+    OrderItemsCompanion Function({
+      Value<String> id,
+      Value<String> orderId,
+      Value<String?> productId,
+      Value<String> productName,
+      Value<double> unitPrice,
+      Value<int> quantity,
+      Value<double> lineTotal,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
 
 class $$OrderItemsTableFilterComposer
     extends Composer<_$AppDatabase, $OrderItemsTable> {
@@ -9753,16 +10437,7 @@ class $$OrderItemsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$OrderItemsTable, OrderItem>(table),
-                  BaseReferences<_$AppDatabase, $OrderItemsTable, OrderItem>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9783,22 +10458,363 @@ typedef $$OrderItemsTableProcessedTableManager =
       OrderItem,
       PrefetchHooks Function()
     >;
-typedef $$OrderVoidsTableCreateCompanionBuilder = OrderVoidsCompanion Function({
-  required String id,
-  required String orderId,
-  required String deviceId,
-  required String reason,
-  Value<DateTime> createdAt,
-  Value<int> rowid,
-});
-typedef $$OrderVoidsTableUpdateCompanionBuilder = OrderVoidsCompanion Function({
-  Value<String> id,
-  Value<String> orderId,
-  Value<String> deviceId,
-  Value<String> reason,
-  Value<DateTime> createdAt,
-  Value<int> rowid,
-});
+typedef $$PaymentsTableCreateCompanionBuilder =
+    PaymentsCompanion Function({
+      required String id,
+      required String storeId,
+      required String deviceId,
+      required String orderId,
+      Value<String?> methodId,
+      Value<String> methodName,
+      Value<String> methodType,
+      required double amount,
+      Value<double?> amountReceived,
+      Value<double?> changeAmount,
+      Value<String> referenceNo,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$PaymentsTableUpdateCompanionBuilder =
+    PaymentsCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> deviceId,
+      Value<String> orderId,
+      Value<String?> methodId,
+      Value<String> methodName,
+      Value<String> methodType,
+      Value<double> amount,
+      Value<double?> amountReceived,
+      Value<double?> changeAmount,
+      Value<String> referenceNo,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$PaymentsTableFilterComposer
+    extends Composer<_$AppDatabase, $PaymentsTable> {
+  $$PaymentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get orderId => $composableBuilder(
+    column: $table.orderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get methodId => $composableBuilder(
+    column: $table.methodId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get methodName => $composableBuilder(
+    column: $table.methodName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get methodType => $composableBuilder(
+    column: $table.methodType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amountReceived => $composableBuilder(
+    column: $table.amountReceived,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get changeAmount => $composableBuilder(
+    column: $table.changeAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get referenceNo => $composableBuilder(
+    column: $table.referenceNo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PaymentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PaymentsTable> {
+  $$PaymentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get orderId => $composableBuilder(
+    column: $table.orderId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get methodId => $composableBuilder(
+    column: $table.methodId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get methodName => $composableBuilder(
+    column: $table.methodName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get methodType => $composableBuilder(
+    column: $table.methodType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amountReceived => $composableBuilder(
+    column: $table.amountReceived,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get changeAmount => $composableBuilder(
+    column: $table.changeAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get referenceNo => $composableBuilder(
+    column: $table.referenceNo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PaymentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PaymentsTable> {
+  $$PaymentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get storeId =>
+      $composableBuilder(column: $table.storeId, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<String> get orderId =>
+      $composableBuilder(column: $table.orderId, builder: (column) => column);
+
+  GeneratedColumn<String> get methodId =>
+      $composableBuilder(column: $table.methodId, builder: (column) => column);
+
+  GeneratedColumn<String> get methodName => $composableBuilder(
+    column: $table.methodName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get methodType => $composableBuilder(
+    column: $table.methodType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<double> get amountReceived => $composableBuilder(
+    column: $table.amountReceived,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get changeAmount => $composableBuilder(
+    column: $table.changeAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get referenceNo => $composableBuilder(
+    column: $table.referenceNo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PaymentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PaymentsTable,
+          Payment,
+          $$PaymentsTableFilterComposer,
+          $$PaymentsTableOrderingComposer,
+          $$PaymentsTableAnnotationComposer,
+          $$PaymentsTableCreateCompanionBuilder,
+          $$PaymentsTableUpdateCompanionBuilder,
+          (Payment, BaseReferences<_$AppDatabase, $PaymentsTable, Payment>),
+          Payment,
+          PrefetchHooks Function()
+        > {
+  $$PaymentsTableTableManager(_$AppDatabase db, $PaymentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PaymentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PaymentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PaymentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<String> orderId = const Value.absent(),
+                Value<String?> methodId = const Value.absent(),
+                Value<String> methodName = const Value.absent(),
+                Value<String> methodType = const Value.absent(),
+                Value<double> amount = const Value.absent(),
+                Value<double?> amountReceived = const Value.absent(),
+                Value<double?> changeAmount = const Value.absent(),
+                Value<String> referenceNo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PaymentsCompanion(
+                id: id,
+                storeId: storeId,
+                deviceId: deviceId,
+                orderId: orderId,
+                methodId: methodId,
+                methodName: methodName,
+                methodType: methodType,
+                amount: amount,
+                amountReceived: amountReceived,
+                changeAmount: changeAmount,
+                referenceNo: referenceNo,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String storeId,
+                required String deviceId,
+                required String orderId,
+                Value<String?> methodId = const Value.absent(),
+                Value<String> methodName = const Value.absent(),
+                Value<String> methodType = const Value.absent(),
+                required double amount,
+                Value<double?> amountReceived = const Value.absent(),
+                Value<double?> changeAmount = const Value.absent(),
+                Value<String> referenceNo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PaymentsCompanion.insert(
+                id: id,
+                storeId: storeId,
+                deviceId: deviceId,
+                orderId: orderId,
+                methodId: methodId,
+                methodName: methodName,
+                methodType: methodType,
+                amount: amount,
+                amountReceived: amountReceived,
+                changeAmount: changeAmount,
+                referenceNo: referenceNo,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PaymentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PaymentsTable,
+      Payment,
+      $$PaymentsTableFilterComposer,
+      $$PaymentsTableOrderingComposer,
+      $$PaymentsTableAnnotationComposer,
+      $$PaymentsTableCreateCompanionBuilder,
+      $$PaymentsTableUpdateCompanionBuilder,
+      (Payment, BaseReferences<_$AppDatabase, $PaymentsTable, Payment>),
+      Payment,
+      PrefetchHooks Function()
+    >;
+typedef $$OrderVoidsTableCreateCompanionBuilder =
+    OrderVoidsCompanion Function({
+      required String id,
+      required String orderId,
+      required String deviceId,
+      required String reason,
+      required DateTime voidedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$OrderVoidsTableUpdateCompanionBuilder =
+    OrderVoidsCompanion Function({
+      Value<String> id,
+      Value<String> orderId,
+      Value<String> deviceId,
+      Value<String> reason,
+      Value<DateTime> voidedAt,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
 
 class $$OrderVoidsTableFilterComposer
     extends Composer<_$AppDatabase, $OrderVoidsTable> {
@@ -9826,6 +10842,11 @@ class $$OrderVoidsTableFilterComposer
 
   ColumnFilters<String> get reason => $composableBuilder(
     column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9864,6 +10885,11 @@ class $$OrderVoidsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get voidedAt => $composableBuilder(
+    column: $table.voidedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9890,6 +10916,9 @@ class $$OrderVoidsTableAnnotationComposer
 
   GeneratedColumn<String> get reason =>
       $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get voidedAt =>
+      $composableBuilder(column: $table.voidedAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -9930,6 +10959,7 @@ class $$OrderVoidsTableTableManager
                 Value<String> orderId = const Value.absent(),
                 Value<String> deviceId = const Value.absent(),
                 Value<String> reason = const Value.absent(),
+                Value<DateTime> voidedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderVoidsCompanion(
@@ -9937,6 +10967,7 @@ class $$OrderVoidsTableTableManager
                 orderId: orderId,
                 deviceId: deviceId,
                 reason: reason,
+                voidedAt: voidedAt,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -9946,6 +10977,7 @@ class $$OrderVoidsTableTableManager
                 required String orderId,
                 required String deviceId,
                 required String reason,
+                required DateTime voidedAt,
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderVoidsCompanion.insert(
@@ -9953,20 +10985,12 @@ class $$OrderVoidsTableTableManager
                 orderId: orderId,
                 deviceId: deviceId,
                 reason: reason,
+                voidedAt: voidedAt,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$OrderVoidsTable, OrderVoid>(table),
-                  BaseReferences<_$AppDatabase, $OrderVoidsTable, OrderVoid>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10220,16 +11244,7 @@ class $$StockEventsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$StockEventsTable, StockEvent>(table),
-                  BaseReferences<_$AppDatabase, $StockEventsTable, StockEvent>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10253,40 +11268,40 @@ typedef $$StockEventsTableProcessedTableManager =
       StockEvent,
       PrefetchHooks Function()
     >;
-typedef $$ShiftsTableCreateCompanionBuilder = ShiftsCompanion Function({
-  required String id,
-  required String storeId,
-  required String deviceId,
-  Value<DateTime> openedAt,
-  Value<DateTime?> closedAt,
-  Value<double?> cashExpected,
-  Value<double?> cashActual,
-  Value<double?> variance,
-  Value<String?> closedBy,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
-typedef $$ShiftsTableUpdateCompanionBuilder = ShiftsCompanion Function({
-  Value<String> id,
-  Value<String> storeId,
-  Value<String> deviceId,
-  Value<DateTime> openedAt,
-  Value<DateTime?> closedAt,
-  Value<double?> cashExpected,
-  Value<double?> cashActual,
-  Value<double?> variance,
-  Value<String?> closedBy,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
+typedef $$DayClosesTableCreateCompanionBuilder =
+    DayClosesCompanion Function({
+      required String id,
+      required String storeId,
+      required String deviceId,
+      required DateTime businessDate,
+      Value<double?> cashExpected,
+      Value<double?> cashActual,
+      Value<double?> variance,
+      Value<String?> closedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
+typedef $$DayClosesTableUpdateCompanionBuilder =
+    DayClosesCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> deviceId,
+      Value<DateTime> businessDate,
+      Value<double?> cashExpected,
+      Value<double?> cashActual,
+      Value<double?> variance,
+      Value<String?> closedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
 
-class $$ShiftsTableFilterComposer
-    extends Composer<_$AppDatabase, $ShiftsTable> {
-  $$ShiftsTableFilterComposer({
+class $$DayClosesTableFilterComposer
+    extends Composer<_$AppDatabase, $DayClosesTable> {
+  $$DayClosesTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -10308,13 +11323,8 @@ class $$ShiftsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<DateTime> get openedAt => $composableBuilder(
-    column: $table.openedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get closedAt => $composableBuilder(
-    column: $table.closedAt,
+  ColumnFilters<DateTime> get businessDate => $composableBuilder(
+    column: $table.businessDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10354,9 +11364,9 @@ class $$ShiftsTableFilterComposer
   );
 }
 
-class $$ShiftsTableOrderingComposer
-    extends Composer<_$AppDatabase, $ShiftsTable> {
-  $$ShiftsTableOrderingComposer({
+class $$DayClosesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DayClosesTable> {
+  $$DayClosesTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -10378,13 +11388,8 @@ class $$ShiftsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
-    column: $table.openedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
-    column: $table.closedAt,
+  ColumnOrderings<DateTime> get businessDate => $composableBuilder(
+    column: $table.businessDate,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -10424,9 +11429,9 @@ class $$ShiftsTableOrderingComposer
   );
 }
 
-class $$ShiftsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $ShiftsTable> {
-  $$ShiftsTableAnnotationComposer({
+class $$DayClosesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DayClosesTable> {
+  $$DayClosesTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -10442,11 +11447,10 @@ class $$ShiftsTableAnnotationComposer
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get openedAt =>
-      $composableBuilder(column: $table.openedAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get closedAt =>
-      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+  GeneratedColumn<DateTime> get businessDate => $composableBuilder(
+    column: $table.businessDate,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<double> get cashExpected => $composableBuilder(
     column: $table.cashExpected,
@@ -10474,39 +11478,38 @@ class $$ShiftsTableAnnotationComposer
       $composableBuilder(column: $table.syncedAt, builder: (column) => column);
 }
 
-class $$ShiftsTableTableManager
+class $$DayClosesTableTableManager
     extends
         RootTableManager<
           _$AppDatabase,
-          $ShiftsTable,
-          Shift,
-          $$ShiftsTableFilterComposer,
-          $$ShiftsTableOrderingComposer,
-          $$ShiftsTableAnnotationComposer,
-          $$ShiftsTableCreateCompanionBuilder,
-          $$ShiftsTableUpdateCompanionBuilder,
-          (Shift, BaseReferences<_$AppDatabase, $ShiftsTable, Shift>),
-          Shift,
+          $DayClosesTable,
+          DayClose,
+          $$DayClosesTableFilterComposer,
+          $$DayClosesTableOrderingComposer,
+          $$DayClosesTableAnnotationComposer,
+          $$DayClosesTableCreateCompanionBuilder,
+          $$DayClosesTableUpdateCompanionBuilder,
+          (DayClose, BaseReferences<_$AppDatabase, $DayClosesTable, DayClose>),
+          DayClose,
           PrefetchHooks Function()
         > {
-  $$ShiftsTableTableManager(_$AppDatabase db, $ShiftsTable table)
+  $$DayClosesTableTableManager(_$AppDatabase db, $DayClosesTable table)
     : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$ShiftsTableFilterComposer($db: db, $table: table),
+              $$DayClosesTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$ShiftsTableOrderingComposer($db: db, $table: table),
+              $$DayClosesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$ShiftsTableAnnotationComposer($db: db, $table: table),
+              $$DayClosesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
                 Value<String> deviceId = const Value.absent(),
-                Value<DateTime> openedAt = const Value.absent(),
-                Value<DateTime?> closedAt = const Value.absent(),
+                Value<DateTime> businessDate = const Value.absent(),
                 Value<double?> cashExpected = const Value.absent(),
                 Value<double?> cashActual = const Value.absent(),
                 Value<double?> variance = const Value.absent(),
@@ -10515,12 +11518,11 @@ class $$ShiftsTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => ShiftsCompanion(
+              }) => DayClosesCompanion(
                 id: id,
                 storeId: storeId,
                 deviceId: deviceId,
-                openedAt: openedAt,
-                closedAt: closedAt,
+                businessDate: businessDate,
                 cashExpected: cashExpected,
                 cashActual: cashActual,
                 variance: variance,
@@ -10535,8 +11537,7 @@ class $$ShiftsTableTableManager
                 required String id,
                 required String storeId,
                 required String deviceId,
-                Value<DateTime> openedAt = const Value.absent(),
-                Value<DateTime?> closedAt = const Value.absent(),
+                required DateTime businessDate,
                 Value<double?> cashExpected = const Value.absent(),
                 Value<double?> cashActual = const Value.absent(),
                 Value<double?> variance = const Value.absent(),
@@ -10545,12 +11546,11 @@ class $$ShiftsTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => ShiftsCompanion.insert(
+              }) => DayClosesCompanion.insert(
                 id: id,
                 storeId: storeId,
                 deviceId: deviceId,
-                openedAt: openedAt,
-                closedAt: closedAt,
+                businessDate: businessDate,
                 cashExpected: cashExpected,
                 cashActual: cashActual,
                 variance: variance,
@@ -10561,64 +11561,57 @@ class $$ShiftsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$ShiftsTable, Shift>(table),
-                  BaseReferences<_$AppDatabase, $ShiftsTable, Shift>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
       );
 }
 
-typedef $$ShiftsTableProcessedTableManager =
+typedef $$DayClosesTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
-      $ShiftsTable,
-      Shift,
-      $$ShiftsTableFilterComposer,
-      $$ShiftsTableOrderingComposer,
-      $$ShiftsTableAnnotationComposer,
-      $$ShiftsTableCreateCompanionBuilder,
-      $$ShiftsTableUpdateCompanionBuilder,
-      (Shift, BaseReferences<_$AppDatabase, $ShiftsTable, Shift>),
-      Shift,
+      $DayClosesTable,
+      DayClose,
+      $$DayClosesTableFilterComposer,
+      $$DayClosesTableOrderingComposer,
+      $$DayClosesTableAnnotationComposer,
+      $$DayClosesTableCreateCompanionBuilder,
+      $$DayClosesTableUpdateCompanionBuilder,
+      (DayClose, BaseReferences<_$AppDatabase, $DayClosesTable, DayClose>),
+      DayClose,
       PrefetchHooks Function()
     >;
-typedef $$SyncOutboxTableCreateCompanionBuilder = SyncOutboxCompanion Function({
-  required String id,
-  required String storeId,
-  required String deviceId,
-  required String entity,
-  required String entityId,
-  required String op,
-  required String payload,
-  Value<int> attempts,
-  Value<String?> lastError,
-  Value<DateTime> createdAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
-typedef $$SyncOutboxTableUpdateCompanionBuilder = SyncOutboxCompanion Function({
-  Value<String> id,
-  Value<String> storeId,
-  Value<String> deviceId,
-  Value<String> entity,
-  Value<String> entityId,
-  Value<String> op,
-  Value<String> payload,
-  Value<int> attempts,
-  Value<String?> lastError,
-  Value<DateTime> createdAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
+typedef $$SyncOutboxTableCreateCompanionBuilder =
+    SyncOutboxCompanion Function({
+      required String id,
+      required String storeId,
+      required String deviceId,
+      required String entity,
+      required String entityId,
+      required String op,
+      required String payload,
+      Value<int> attempts,
+      Value<String?> lastError,
+      Value<DateTime> createdAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
+typedef $$SyncOutboxTableUpdateCompanionBuilder =
+    SyncOutboxCompanion Function({
+      Value<String> id,
+      Value<String> storeId,
+      Value<String> deviceId,
+      Value<String> entity,
+      Value<String> entityId,
+      Value<String> op,
+      Value<String> payload,
+      Value<int> attempts,
+      Value<String?> lastError,
+      Value<DateTime> createdAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
 
 class $$SyncOutboxTableFilterComposer
     extends Composer<_$AppDatabase, $SyncOutboxTable> {
@@ -10879,16 +11872,7 @@ class $$SyncOutboxTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$SyncOutboxTable, SyncOutboxData>(table),
-                  BaseReferences<
-                    _$AppDatabase,
-                    $SyncOutboxTable,
-                    SyncOutboxData
-                  >(db, table, e),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10912,22 +11896,24 @@ typedef $$SyncOutboxTableProcessedTableManager =
       SyncOutboxData,
       PrefetchHooks Function()
     >;
-typedef $$SettingsTableCreateCompanionBuilder = SettingsCompanion Function({
-  required String storeId,
-  required String key,
-  required String value,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
-typedef $$SettingsTableUpdateCompanionBuilder = SettingsCompanion Function({
-  Value<String> storeId,
-  Value<String> key,
-  Value<String> value,
-  Value<DateTime> updatedAt,
-  Value<DateTime?> syncedAt,
-  Value<int> rowid,
-});
+typedef $$SettingsTableCreateCompanionBuilder =
+    SettingsCompanion Function({
+      required String storeId,
+      required String key,
+      required String value,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
+typedef $$SettingsTableUpdateCompanionBuilder =
+    SettingsCompanion Function({
+      Value<String> storeId,
+      Value<String> key,
+      Value<String> value,
+      Value<DateTime> updatedAt,
+      Value<DateTime?> syncedAt,
+      Value<int> rowid,
+    });
 
 class $$SettingsTableFilterComposer
     extends Composer<_$AppDatabase, $SettingsTable> {
@@ -11083,16 +12069,7 @@ class $$SettingsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$SettingsTable, Setting>(table),
-                  BaseReferences<_$AppDatabase, $SettingsTable, Setting>(
-                    db,
-                    table,
-                    e,
-                  ),
-                ),
-              )
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11131,12 +12108,14 @@ class $AppDatabaseManager {
       $$OrdersTableTableManager(_db, _db.orders);
   $$OrderItemsTableTableManager get orderItems =>
       $$OrderItemsTableTableManager(_db, _db.orderItems);
+  $$PaymentsTableTableManager get payments =>
+      $$PaymentsTableTableManager(_db, _db.payments);
   $$OrderVoidsTableTableManager get orderVoids =>
       $$OrderVoidsTableTableManager(_db, _db.orderVoids);
   $$StockEventsTableTableManager get stockEvents =>
       $$StockEventsTableTableManager(_db, _db.stockEvents);
-  $$ShiftsTableTableManager get shifts =>
-      $$ShiftsTableTableManager(_db, _db.shifts);
+  $$DayClosesTableTableManager get dayCloses =>
+      $$DayClosesTableTableManager(_db, _db.dayCloses);
   $$SyncOutboxTableTableManager get syncOutbox =>
       $$SyncOutboxTableTableManager(_db, _db.syncOutbox);
   $$SettingsTableTableManager get settings =>

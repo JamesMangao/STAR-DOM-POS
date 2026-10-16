@@ -34,24 +34,84 @@ class AppTheme {
 
     final text = const TextTheme(
       displayLarge: TextStyle(
-          fontFamily: 'Sora', fontWeight: FontWeight.w800, fontSize: 34, height: 1.1, letterSpacing: -0.5),
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w800,
+        fontSize: 34,
+        height: 1.1,
+        letterSpacing: -0.5,
+      ),
       displayMedium: TextStyle(
-          fontFamily: 'Sora', fontWeight: FontWeight.w800, fontSize: 24, height: 1.15, letterSpacing: -0.4),
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w800,
+        fontSize: 24,
+        height: 1.15,
+        letterSpacing: -0.4,
+      ),
       displaySmall: TextStyle(
-          fontFamily: 'Sora', fontWeight: FontWeight.w800, fontSize: 20, height: 1.2, letterSpacing: -0.3),
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w800,
+        fontSize: 20,
+        height: 1.2,
+        letterSpacing: -0.3,
+      ),
       headlineMedium: TextStyle(
-          fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 18, height: 1.25, letterSpacing: -0.2),
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w700,
+        fontSize: 18,
+        height: 1.25,
+        letterSpacing: -0.2,
+      ),
       titleLarge: TextStyle(
-          fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 15, height: 1.3, letterSpacing: -0.1),
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w700,
+        fontSize: 15,
+        height: 1.3,
+        letterSpacing: -0.1,
+      ),
       titleMedium: TextStyle(
-          fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 14.5, height: 1.35, letterSpacing: -0.1),
-      bodyLarge: TextStyle(fontFamily: 'PlusJakartaSans', fontWeight: FontWeight.w400, fontSize: 14, height: 1.6),
-      bodyMedium: TextStyle(fontFamily: 'PlusJakartaSans', fontWeight: FontWeight.w400, fontSize: 13, height: 1.6),
-      bodySmall: TextStyle(fontFamily: 'PlusJakartaSans', fontWeight: FontWeight.w400, fontSize: 12, height: 1.55),
-      labelLarge: TextStyle(fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 13, height: 1.3),
-      labelMedium: TextStyle(fontFamily: 'Sora', fontWeight: FontWeight.w700, fontSize: 12, height: 1.3),
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w700,
+        fontSize: 14.5,
+        height: 1.35,
+        letterSpacing: -0.1,
+      ),
+      bodyLarge: TextStyle(
+        fontFamily: 'PlusJakartaSans',
+        fontWeight: FontWeight.w400,
+        fontSize: 14,
+        height: 1.6,
+      ),
+      bodyMedium: TextStyle(
+        fontFamily: 'PlusJakartaSans',
+        fontWeight: FontWeight.w400,
+        fontSize: 13,
+        height: 1.6,
+      ),
+      bodySmall: TextStyle(
+        fontFamily: 'PlusJakartaSans',
+        fontWeight: FontWeight.w400,
+        fontSize: 12,
+        height: 1.55,
+      ),
+      labelLarge: TextStyle(
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w700,
+        fontSize: 13,
+        height: 1.3,
+      ),
+      labelMedium: TextStyle(
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w700,
+        fontSize: 12,
+        height: 1.3,
+      ),
       labelSmall: TextStyle(
-          fontFamily: 'Sora', fontWeight: FontWeight.w800, fontSize: 10, height: 1.4, letterSpacing: 1.2),
+        fontFamily: 'Sora',
+        fontWeight: FontWeight.w800,
+        fontSize: 10,
+        height: 1.4,
+        letterSpacing: 1.2,
+      ),
     );
 
     return ThemeData(
@@ -68,7 +128,11 @@ class AppTheme {
         elevation: 0,
         centerTitle: false,
       ),
-      dividerTheme: const DividerThemeData(color: AppColors.line, thickness: 1, space: 1),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.line,
+        thickness: 1,
+        space: 1,
+      ),
     );
   }
 }
@@ -82,5 +146,6 @@ class PosTokens extends ThemeExtension<PosTokens> {
   PosTokens copyWith() => const PosTokens();
 
   @override
-  PosTokens lerp(ThemeExtension<PosTokens>? other, double t) => const PosTokens();
+  PosTokens lerp(ThemeExtension<PosTokens>? other, double t) =>
+      const PosTokens();
 }
