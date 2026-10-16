@@ -1,18 +1,59 @@
 # STARDOM-POS — Implementation Plan
 
-Single-owner booth/local POS. Android phone, offline-first, Bluetooth print, multi-device sync.
-Backend: existing Supabase project (ref `pykhzrpgdszcwvpydebt`), reset + reseed for POS.
+Single-owner booth POS, shipped as a **Flutter web PWA installed on an iPad 9th gen**
+(Safari → Share → Add to Home Screen, runs standalone). Offline-first, PDF receipts through
+the system share/AirPrint sheet, multi-device sync.
+
+**Web is the only target.** There is no APK, no iOS build, no TestFlight/Ad-Hoc profile and
+no Bluetooth printing — the App Store, codesigning and TestFlight all need a paid developer
+account, and this project is deliberately free-only:
+
+* **Backend:** existing Supabase project (ref `pykhzrpgdszcwvpydebt`), reset + reseed for POS.
+* **Hosting:** Cloudflare Pages free tier, direct upload of `build/web`.
+
 Website retired — old website tables are dropped; products/categories/images are migrated, not lost.
+
+---
+
+## 0. Device engineering rules (iPad 9th gen, standalone PWA)
+
+Target: **iPad 9th gen** — A13, 3 GB RAM, 10.2", 2160×1620 px @2× = **1080×810 pt landscape /
+810×1080 pt portrait**, iPadOS Safari, Wi-Fi only at the booth and often offline. These rules
+are binding for every screen and are repeated in `docs/design-system.md`.
+
+| Rule | Why | Where it lives |
+|---|---|---|
+| Touch only: targets ≥ **48 pt**, no hover, no tooltips, no long-press or right-click dependence | a finger is the only input device | design-system.md §Touch |
+| Standalone mode has **no URL bar and no browser back** — every pushed route has an in-app back button | the system back affordance does not exist | design-system.md §Navigation |
+| The iOS edge-swipe-back must pop the Flutter route and never exit the app | an accidental edge swipe must not kill a sale | design-system.md §Navigation |
+| The on-screen keyboard covers lower fields: the scaffold must resize for it and the reference-number field must stay visible | checkout fields sit at the bottom | design-system.md §Forms |
+| Input font size ≥ **16 px** | Safari auto-zooms inputs smaller than 16 px | `lib/main.dart` sign-in screen; design-system.md §Forms |
+| Safe-area insets (home indicator) respected, `viewport-fit=cover`, no pinch zoom, `overscroll-behavior: none` | notch/home indicator + accidental zoom | `web/index.html` |
+| 3 GB RAM: product images ≤ **400 px**, lazy builders everywhere, never load all orders into memory | WebKit kills a heavy tab | §3.4, design-system.md §Performance |
+| The peso sign **₱ (U+20B1)** must render in the bundled fonts | a missing glyph prints a blank box on every receipt | **verified**: `node scripts/font-check.js assets/fonts/*.ttf` — Sora lacks it, PlusJakartaSans has it, and every Sora style declares PlusJakartaSans as its fallback (`lib/core/theme.dart`) |
+| Time zone **Asia/Manila (UTC+8, no DST)** | the business day is the store-local day | §3.11, `BusinessDate` in `lib/data/logic.dart` |
+| **Wake lock** while the app is visible (`navigator.wakeLock('screen')`, guarded, silent if unsupported) | the screen must not sleep on the booth table | `lib/core/web_apis.dart` |
+
+Operating procedure for the owner is `docs/owner-setup.md` (print it; it contains no code).
 
 ---
 
 ## 1. Stack recommendation
 
-**Flutter (Dart) → Android APK, Supabase backend.**
+**Flutter (Dart) → web PWA on the iPad, Supabase backend, Cloudflare Pages hosting.**
 
-1. Source stack (ASP.NET Web Forms VB.NET, desktop-only) cannot ship to an Android phone — offline-first + Bluetooth ESC/POS + mobile APK forces the change.
-2. Flutter builds one Android APK with `--dart-define` env injection (SUPABASE_URL, SUPABASE_ANON_KEY, OWNER_EMAIL, OWNER_PASSWORD — never committed), has mature offline SQLite (drift) and Bluetooth printing (esc_pos_bluetooth) packages, and ports the design tokens 1:1 into ThemeData (Sora + Plus Jakarta Sans via google_fonts).
-3. Supabase stays the backend (same project): Auth for silent owner sign-in, Postgres for source of truth, Storage (`pos-assets` bucket) for product/QR images.
+1. The source stack (ASP.NET Web Forms VB.NET, desktop-only) cannot ship to an iPad, and a
+   native iOS app needs a paid Apple Developer account. A PWA has none of those costs, installs
+   from Safari's share sheet and works offline — the actual constraint at the booth.
+2. Flutter compiles one `build/web` bundle. Offline SQLite is **drift on wasm**
+   (`sqlite3.wasm` + `drift_worker.js`, both committed in `web/`, both same-origin), receipts are
+   **PDF through the system share/print sheet** (`pdf` + `printing`), and the design tokens are
+   ported 1:1 into `ThemeData` with **bundled** fonts (Sora + Plus Jakarta Sans assets, no
+   `google_fonts` runtime fetch — an offline booth cannot reach a font CDN).
+3. `--dart-define` injects **only** `SUPABASE_URL` and `SUPABASE_ANON_KEY`. The bundle is public,
+   so the owner signs in once by hand (§6) and no credential is ever compiled in.
+4. Supabase stays the backend (same project): Auth for the one-time owner sign-in, Postgres as
+   the source of truth, Storage (`pos-assets`, private) for product/QR images.
 
 ---
 
@@ -21,63 +62,57 @@ Website retired — old website tables are dropped; products/categories/images a
 ```
 D:\STARDOM-POS\
 ├── docs\
-│   ├── design-system.md          # tokens + components (ported)
+│   ├── design-system.md          # tokens + components + the iPad device rules
+│   ├── owner-setup.md            # PRINT THIS: Add to Home Screen, Auto-Lock, Guided Access
 │   ├── plan.md                   # this file
+│   ├── db-facts.txt              # read-only facts about the live DB (reset drop list)
 │   └── chatgpt-mockup-prompt.md  # copy-paste image-gen prompt
 ├── supabase\
-│   ├── export\                   # Step A output: products.json, categories.json, productimages.json
+│   ├── export\                   # Step A output: products/categories/productimages/paymentsettings + qr_*.png
 │   ├── reset\                    # Step B: reset.sql (NEVER run without CONFIRM RESET)
-│   ├── migrations\               # Step C schema: 001_init, 002_commerce, 003_sync_rls
+│   ├── migrations\               # 001_init, 002_commerce, 003_sync_rls, 004_device_registration
 │   └── seed\                     # seed.sql (store, payment methods, receipt settings)
-├── scripts\
-│   ├── export.js                 # Step A: read-only dump → supabase/export/*.json
-│   ├── import.js                 # Step C: transform → POS schema, upload images, seed
-│   └── guard.js                 # pre-flight: export exists, row counts match, CONFIRM RESET
-├── pos\                          # Flutter app
-│   ├── lib\
-│   │   ├── core\
-│   │   │   ├── theme.dart        # AppColors/Radius/Shadows/Typography from design-system.md
-│   │   │   ├── format.dart       # ₱ currency, order_no, dates
-│   │   │   └── env.dart          # --dart-define config (url, keys, owner creds)
-│   │   ├── data\
-│   │   │   ├── db.dart           # drift SQLite (local primary DB)
-│   │   │   ├── models.dart       # Store, Device, Product, Category, PaymentMethod, Order...
-│   │   │   ├── api.dart          # Supabase REST + storage signed URLs
-│   │   │   ├── auth.dart         # silent sign-in, secure storage, token refresh
-│   │   │   ├── sync.dart         # outbox push, delta pull, backoff, dedupe
-│   │   │   └── outbox.dart       # outbox queue ops
-│   │   ├── screens\
-│   │   │   ├── sell_screen.dart
-│   │   │   ├── cart_screen.dart
-│   │   │   ├── cash_payment_screen.dart
-│   │   │   ├── noncash_payment_screen.dart   # GCash/GoTyme/bank/e-wallet + QR modal
-│   │   │   ├── receipt_screen.dart
-│   │   │   ├── orders_screen.dart
-│   │   │   ├── report_screen.dart           # end-of-day
-│   │   │   ├── products_screen.dart
-│   │   │   ├── settings_screen.dart
-│   │   │   ├── payment_methods_screen.dart  # CRUD + edit form
-│   │   │   ├── devices_screen.dart
-│   │   │   └── sync_details_screen.dart
-│   │   └── widgets\
-│   │       ├── app_button.dart  # .btn variants per design-system
-│   │       ├── app_card.dart    # card / kpi / panel / pcard
-│   │       ├── app_chip.dart    # chip / pill / badge / status_chip
-│   │       ├── app_field.dart  # labeled input
-│   │       ├── sync_chip.dart   # Synced | Offline-N | Failed
-│   │       ├── product_card.dart
-│   │       ├── qty_stepper.dart
-│   │       ├── bottom_nav.dart  # Sell | Orders | Products | Reports | Settings
-│   │       └── receipt_paper.dart
-│   ├── assets\
-│   │   ├── logo.webp             # copied from D:\STARDOM\STAR-DOM-Web\Assets\stardom-logo.webp
-│   │   └── product_placeholder.webp
-│   ├── pubspec.yaml
-│   └── android\                  # bluetooth permission, min sdk 23+
-├── .env.example                  # SUPABASE_URL, SUPABASE_ANON_KEY, OWNER_EMAIL, OWNER_PASSWORD
-├── .gitignore                    # .env, build/, *.jks
-└── README.md                     # build/release APK with env injection
+├── scripts\                      # Node only; .env is the ONLY credential source
+│   ├── env.js                    # the single .env loader + --dart-define whitelist (2 keys)
+│   ├── export.js  import.js  verify.js  reset.js  db-facts.js  manifest.js  pg.js
+│   ├── build-web.js              # build the PWA + scan it. NEVER deploys.
+│   ├── offline-test.js           # Playwright: boot, no-CDN, offline reload
+│   ├── font-check.js             # ₱ (U+20B1) must exist in the bundled fonts
+│   ├── pwa-icons.js              # generate web/icons from the brand logo
+│   └── sql.test.js env.test.js import.test.js verify.test.js reset.test.js font.test.js
+├── lib\                          # the Flutter app (web is the only target)
+│   ├── main.dart                 # app SHELL: boot, session, sync chip, unsynced guard, export
+│   ├── core\
+│   │   ├── theme.dart            # tokens + the Sora→PlusJakartaSans ₱ fallback
+│   │   ├── tokens.dart format.dart icons.dart gallery.dart
+│   │   ├── env.dart              # --dart-define: SUPABASE_URL + SUPABASE_ANON_KEY ONLY
+│   │   └── web_apis.dart         # conditional: navigator.storage.persist, wake lock, blob download
+│   └── data\
+│       ├── db.dart  tables.dart  db.g.dart     # drift (local primary DB, schemaVersion 3)
+│       ├── db_open.dart + db_open_web.dart / db_open_io.dart   # wasm on web, memory on the VM
+│       ├── api.dart              # Supabase REST + storage (+ image bytes for the offline cache)
+│       ├── auth.dart             # ONE-TIME sign-in; supabase_flutter persists the session
+│       ├── sync.dart  sync_policy.dart          # outbox push, delta pull, backoff, dedupe
+│       ├── device.dart           # server-assigned device code (B7)
+│       ├── printing.dart         # ReceiptPrinter: PDF via the share/AirPrint sheet
+│       └── bundle.dart  logic.dart
+├── web\                          # the PWA shell (W4)
+│   ├── index.html                # viewport-fit, no pinch zoom, safe areas, service worker
+│   ├── manifest.json             # "Stardom POS", standalone, #B70011 / #FFF8F5, icons
+│   ├── sw.js                     # OUR app-shell cache (Flutter's stub is removed at build)
+│   ├── _headers                  # Cloudflare Pages cache rules
+│   ├── sqlite3.wasm              # vendored: sqlite3.dart 2.9.4 (see §10.4)
+│   ├── drift_worker.js  drift_worker.dart   # compiled FROM drift 2.31.0
+│   └── icons\  favicon.png
+├── assets\fonts\  assets\images\ # bundled fonts (no runtime CDN) + brand logo
+├── test\                         # db_test, logic_test, sync_policy_test, bundle_push_test, widget_test
+├── .env.example                  # SUPABASE_URL, SUPABASE_ANON_KEY, SERVICE_ROLE, DB_URL, OWNER_*
+└── .gitignore                    # .env, build/, review bundles
 ```
+
+**Not maintained:** `android/` and `ios/` were removed. There is no APK, no TestFlight and no
+Ad-Hoc path; `scripts/build_apk.sh` and `scripts/apk-secret-scan.js` are gone with them, replaced
+by `scripts/build-web.js`.
 
 ---
 
@@ -226,14 +261,28 @@ CREATE POLICY owner_all ON products
 
 ---
 
-## 6. Silent auth (no login UI)
+## 6. Auth — one-time sign-in (W1)
 
-1. App start: read session from **flutter_secure_storage**. If none → `supabase.auth.signInWithPassword(email: OWNER_EMAIL, password: OWNER_PASSWORD)` (creds from `--dart-define` / env, never committed).
-2. Persist session; auto-refresh via Supabase token refresh (refresh token stored in secure storage).
-3. **Offline start:** cached session + local DB → no blocking splash. If token expired and offline → keep working; retry sign-in in background when online.
-4. **No logout / no register / no password screens anywhere.**
-5. Repeated sign-in failure: non-blocking banner in **Sync Details** ("Signing in… retrying"), keep working offline.
-6. Store bootstrap: single `stores.id` (seeded); owner row linked via `stores.owner_id = auth.uid()`.
+**Decision log:** "No login UI, creds compiled in" → **"One-time sign-in screen; credentials
+never in the bundle"**. `OWNER_EMAIL`/`OWNER_PASSWORD` are no longer `--dart-define` values: a
+public web bundle is readable by anyone with devtools, so a compiled-in password is a published
+password. They stay in `.env` for the Node scripts only (`import.js` creates the owner through
+the admin API).
+
+1. First run (or after the session is lost): a single screen takes email + password,
+   `signInWithPassword`, and nothing else — **no signup, no forgot-password**, generic error copy,
+   and a deliberate 2 s client-side delay after a rejection.
+2. `supabase_flutter` persists the session itself (localStorage on web), so afterwards the app
+   refreshes silently and the screen never appears again.
+3. **Selling never depends on auth.** The local database is primary and the outbox keeps filling
+   while signed out; a missing session is a small "Sign in to sync" chip plus a Settings line.
+4. Offline start: local DB → no blocking splash. An expired token with no network just means
+   "not syncing yet".
+5. The store row is seeded by `import.js`; ownership is `stores.owner_id = auth.uid()`, enforced
+   by RLS (003) — not by the client.
+6. Build-time enforcement: `scripts/env.js`'s whitelist is exactly
+   `['SUPABASE_URL','SUPABASE_ANON_KEY']`, both `OWNER_*` keys are on the never-in-app list, and
+   `scripts/build-web.js` scans the built bundle for their values.
 
 ---
 
@@ -262,9 +311,24 @@ Dump to `supabase\export\`:
 Print row counts; abort if 0.
 
 ### Step B — RESET (supabase\reset\reset.sql) — **NOT EXECUTED**
-Idempotent SQL: drop all 32 old website tables (`drop table if exists ... cascade`), drop their 32 `_backend_access` policies, drop storage bucket `assets` + storage policies, delete `auth.users` rows, revoke anon/authenticated on old objects.
-**Requires:** user types `CONFIRM RESET` in chat + confirms project ref `pykhzrpgdszcwvpydebt` + export files exist with matching row counts (guard.js).
-Optional pre-step: `pg_dump` backup (skippable).
+`reset.js` is the only runner and it executes `reset.sql` verbatim (single source of truth — there
+is no second drop list in JS). Inside one transaction it: prechecks that the database is the
+WEBSITE one (raises if any POS-only table exists, if `public.products` has `store_id`, or if the
+website signature `products.baseprice` is missing), unschedules any `cron.job` whose command
+references a dropped object, drops exactly the 32 named website tables plus the named functions
+(`run_delivery_sweep`, `trg_star_dom_touch_updated_at`), sequences and triggers from
+`docs/db-facts.txt`. It never drops the `public` schema and there is **no `auth.users` block**
+(the website has 0 auth users).
+
+After the SQL commits, `reset.js` deletes the retired bucket through the **Storage API**
+(`assets`: 44 objects, no backup — a user decision), because Supabase blocks
+`delete from storage.objects` and inside the transaction that would roll the whole reset back.
+It refuses any other bucket id.
+
+**Requires:** a real TTY on stdin AND stdout, then the project ref typed exactly, then
+`CONFIRM RESET` typed exactly. An agent cannot satisfy that: piped stdio exits 1 before any DB
+connection. Dry run (`node reset.js --ref …`) is unrestricted and prints `sha256(reset.sql)`,
+the website signature verdict and "will delete N objects, X bytes".
 
 ### Step C — IMPORT/SEED (scripts/import.js + seed.sql)
 1. Apply `supabase/migrations/*.sql` (idempotent).
@@ -290,85 +354,148 @@ Optional pre-step: `pg_dump` backup (skippable).
 
 ---
 
-## 9. Dependencies
+## 9. Dependency table (W7)
 
-**Flutter app (`pos/pubspec.yaml`):**
-| Package | Purpose |
-|---|---|
-| supabase_flutter | Auth (silent sign-in), REST, realtime |
-| drift + sqlite3_flutter_libs | Local offline DB (primary) |
-| flutter_secure_storage | Session persistence |
-| esc_pos_bluetooth + flutter_blue_serial | Bluetooth ESC/POS receipt printing |
-| google_fonts | Sora + Plus Jakarta Sans |
-| material_symbols_icons | Material Symbols Outlined glyphs |
-| image / image_compression | Product/QR image resize + local cache |
-| path_provider | Local image cache dir |
-| uuid | Client-side UUIDs (outbox dedupe) |
-| intl | ₱ formatting, dates |
+Every package, whether it works on the web, and what happened to it. "Removed" means it is gone
+from `pubspec.yaml`; the web build never had an implementation of it.
 
-**Scripts (Node 18+):** `pg` (export/import), `@supabase/supabase-js` (admin: owner user, storage upload), `sharp` (image optimize to ≤400px WebP).
+| Package | Web support | Action |
+|---|---|---|
+| `flutter` (SDK) | yes — the only target | keep |
+| `supabase_flutter` | yes (REST/Storage/Auth over fetch; persists its own session on web) | keep |
+| `drift` | yes, on wasm (`sqlite3.wasm` + `drift_worker.js`, both committed in `web/`) | keep, **pinned family** |
+| `web` | yes — `navigator.storage`, WakeLock, Blob download | added |
+| `pdf` + `printing` | yes (`sharePdf`/`layoutPdf`; Web Share API on iOS, download fallback) | added (W5) |
+| `http` | yes — only for the portable `ClientException` network shape | added |
+| `material_symbols_icons` | yes (font asset, bundled) | keep |
+| `uuid` | yes (pure Dart) | keep |
+| `intl` | yes (pure Dart) | keep |
+| `cupertino_icons` | yes | keep (unused by screens yet) |
+| `drift_dev`, `build_runner` | dev only | keep |
+| `sqlite3` | dev only — `NativeDatabase` for `flutter test` on the VM | keep as a dev dependency |
+| `sqlite3_flutter_libs` | **no web implementation** | removed (nothing native ships) |
+| `flutter_secure_storage` | web impl exists, but pointless here: `supabase_flutter` already persists the session and the device id lives in drift | removed |
+| `device_info_plus` | web impl exists (user agent only) — a UUID is enough | removed |
+| `path_provider` | no writable filesystem in a browser tab | removed |
+| `print_bluetooth_thermal` | no Web Bluetooth-to-ESC/POS path, and no hardware pairing on iPad | removed (W5) |
+| `esc_pos_utils_plus` | ESC/POS byte building for the above | removed (W5) |
+| `google_fonts` | would fetch fonts at runtime from a CDN — impossible offline | never used; fonts are bundled assets |
 
-**Env (build-time injection, never committed):**
+**Scripts (Node 18+):** `pg` (read-only export/db-facts), `@supabase/supabase-js` (admin: owner
+user, storage upload/delete), `sharp` (images to ≤400 px WebP, PWA icons),
+`@electric-sql/pglite` (dev: run migrations + RLS tests with no live DB), `playwright`
+(dev, dev-only: `scripts/offline-test.js`).
+
+**Env (never committed).** Only these two are compiled into the bundle:
 ```
 SUPABASE_URL=https://<ref>.supabase.co
-SUPABASE_ANON_KEY=<anon key>
-OWNER_EMAIL=<owner email>
-OWNER_PASSWORD=<owner password>
+SUPABASE_ANON_KEY=<anon/publishable key>
 ```
-Flutter: `flutter build apk --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=... --dart-define=OWNER_EMAIL=... --dart-define=OWNER_PASSWORD=...`
+Build: `node scripts/build-web.js` → `flutter build web --release --no-web-resources-cdn
+--dart-define=SUPABASE_URL=… --dart-define=SUPABASE_ANON_KEY=…`
 
 ---
 
-## 10. Build & release
+## 10. Build, release and hosting
 
 ```bash
-cd pos
-flutter pub get
-flutter build apk --release \
-  --dart-define=SUPABASE_URL=$SUPABASE_URL \
-  --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
-  --dart-define=OWNER_EMAIL=$OWNER_EMAIL \
-  --dart-define=OWNER_PASSWORD=$OWNER_PASSWORD
-# output: pos/build/app/outputs/flutter-apk/app-release.apk
+# ONE build+scan command. It never deploys and never prints a value.
+node scripts/build-web.js            # build + scan
+node scripts/build-web.js --scan-only
 ```
 
-Android manifest: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`, `INTERNET`, `ACCESS_NETWORK_STATE`. minSdk 23, targetSdk 34.
+What it does: reads `.env` through `scripts/env.js`, passes ONLY
+`SUPABASE_URL` + `SUPABASE_ANON_KEY` as `--dart-define`s, runs
+`flutter build web --release --no-web-resources-cdn`, then
 
-### 10.1 APK secret scan — what it proves, and what it does not
+1. neutralises Flutter's `serviceWorkerSettings` in `flutter_bootstrap.js` and deletes the
+   generated `flutter_service_worker.js` (Flutter 3.47's worker calls
+   `self.registration.unregister()` and caches nothing — see §10.5),
+2. scans all 50+ files in `build/web` for the service-role key, the DB password and the owner
+   credentials, with the SUPABASE_URL host as a POSITIVE control,
+3. asserts the offline set is present: `canvaskit/canvaskit.wasm`, `sqlite3.wasm`,
+   `drift_worker.js`, `sw.js`, both bundled fonts, the logo and the icons.
 
-`scripts/apk-secret-scan.js` unzips an APK to a temp dir, scans every file's
-bytes for `SUPABASE_SERVICE_ROLE_KEY` and the `SUPABASE_DB_URL` password, plants
-both needles into a stub file to prove the scan can actually see them, then
-deletes the temp dir. It prints hit COUNTS only — never a value.
-
-**Measured limit (do not trust a bare `found=0`):** `Env.*` is
-`String.fromEnvironment`, so Dart tree-shakes any constant the app never reads.
-In the placeholder build the debug APK contains no anon key, no URL and no owner
-email at all — `CONTROL TIER2 (SUPABASE_URL host) found=0` — while a compiled
-string literal is found — `CONTROL TIER1 (STAR:DOM POS) found=1`. Until the app
-reads `Env.*`, a clean scan of the server secrets proves nothing about them,
-which is why TIER2 controls exist.
-
-**Mandatory release step (Part B):**
+### 10.1 Hosting (Cloudflare Pages, free — the USER deploys)
 
 ```bash
-scripts/build_apk.sh release
-node scripts/apk-secret-scan.js build/app/outputs/flutter-apk/app-release.apk --require-dart-defines
+npx wrangler pages deploy build/web --project-name stardom-pos
 ```
 
-Required result: `CONTROL TIER1 = 1`; `CONTROL TIER2` SUPABASE_URL host `= 1`
-and OWNER_EMAIL `= 1` (i.e. the app really does read `Env.*`);
-`SUPABASE_SERVICE_ROLE_KEY = 0`; `SUPABASE_DB_PASSWORD = 0`;
-`SELF-TEST overall: OK`. With `--require-dart-defines` any TIER2 zero is a
-non-zero exit — a scan that cannot see the dart-define values must never be
-reported as proof that the secrets are absent.
+`web/_headers` is copied into the build and sets the cache policy: `index.html`,
+`flutter_service_worker.js`-successor (`sw.js` — see §10.5) and `version.json` must
+revalidate; hashed assets, `canvaskit/*`, the wasm and the fonts may be cached forever;
+`sqlite3.wasm` is served as `application/wasm`.
+
+**Free-tier note:** a Supabase free project **pauses after 7 days with no activity**. Data is
+kept; it is restored from the dashboard when the project wakes. The booth iPad therefore opens
+the app online at least every few days (the sync loop is enough activity), and the owner-setup
+checklist says so.
+
+### 10.2 Web bundle secret scan — what it proves, and what it does not
+
+The scan searches the BUILT bundle, so `Env.*` tree-shaking no longer hides anything:
+`--dart-define` values end up in `main.dart.js` as string literals. That is exactly why the
+SUPABASE_URL host is a required POSITIVE control. A genuine `found=0` for the owner credentials
+is only meaningful next to `CONTROL (SUPABASE_URL host) found=1` — a build that lost its defines
+must never be reported as "no secrets".
+
+`sb_secret_` is matched only with a ≥20-character payload: supabase's own Dart code contains the
+bare prefix while checking key style, so a substring search reports a leak in every build. The
+bare-prefix count is still printed, with its maximum payload length, so the conclusion
+"prefix literal, not a value" is evidenced rather than assumed.
+
+### 10.3 Vendored web assets (and why those exact files)
+
+| File | Source | Why this one |
+|---|---|---|
+| `web/sqlite3.wasm` | sqlite3.dart release **2.9.4** (730,989 bytes, sha256 `922a76b1…b52117`) | drift 2.x is built against the **2.x** sqlite3 package, and a 3.x wasm does not load. The first attempt used a wasm copied out of drift's devtools bundle and the app failed at boot: the worker came up, `sqlite3.wasm` was requested, and nothing else happened. Version-matched, verified by the offline test. |
+| `web/drift_worker.js` | compiled here: `dart compile js -O2 web/drift_worker.dart -o web/drift_worker.js` from **drift 2.31.0** | the worker speaks drift's wire protocol to `main.dart.js`, so it must be the same drift version. Compiling it locally is reproducible and cannot silently mismatch a `pub upgrade`. |
+| `web/icons/*`, `web/favicon.png` | generated: `node scripts/pwa-icons.js` from `assets/images/stardom-logo.webp` | the real brand logo (read from the read-only website folder), with maskable variants padded to the 60 % safe zone. |
+| `web/sw.js` | hand-written | Flutter's worker unregisters itself (§10.3); the shell list inside it is generated by `scripts/build-web.js` from the actual build output. |
+
+### 10.4 Measured result (this build)
+
+`node scripts/offline-test.js`, Chromium (headless), serving `build/web` over loopback:
+
+```
+OK   app boots online (Flutter view mounted)
+OK   drift reports which storage backend it picked — storageMode=sharedIndexedDb persistent=true
+OK   navigator.storage.persist()'s answer is recorded — storagePersisted=unknown
+OK   zero CDN requests while online
+OK   our service worker is registered
+OK   app OPENS with the network off (shell served from cache)
+OK   the local database opens offline too (same storage backend) — storageMode=sharedIndexedDb
+OK   the outbox state is readable offline (no sale is lost) — pendingSales=0 imagesCached=0
+OK   zero CDN requests while offline
+```
+
+**Storage mode measured: `sharedIndexedDb`** — a durable, shared-worker IndexedDB backend, chosen
+WITHOUT cross-origin isolation. That is why no COOP/COEP headers are served (§10.1): the mode
+WebKit can actually use here does not need them, and adding them would break the cross-origin
+Supabase requests instead. `storagePersisted=unknown` on this run is correct, not a bug: it is
+written into settings once a store row exists (the test build has none yet).
+
+**Not verified:** real Safari on the iPad and its storage-mode choice — Playwright's WebKit on
+Windows is not iOS Safari. Settings and `window.__stardomBootInfo` REPORT the mode on the real
+device; `docs/owner-setup.md` has the on-device Airplane-Mode check.
+
+### 10.5 Service worker and updates
+
+Flutter 3.47's generated worker is a stub that unregisters itself, so `web/sw.js` is ours:
+app-shell precache (entry point, engine, wasm, worker, fonts, logo, icons) plus a network-first
+navigation strategy. Supabase REST/Storage/Auth are cross-origin and are never intercepted.
+
+**Update behaviour:** reopening the app while online fetches a fresh `index.html` (network-first)
+and revalidates `sw.js`; the new version is used from the next load on. Offline, the cached shell
+keeps the booth running. `VERSION` in `web/sw.js` is the cache-busting knob.
 
 ---
 
 ## 11. Stage 2 runbook (print only — DO NOT RUN FROM AN AGENT)
 
 Everything below is executed BY THE USER, in his own terminal. An agent prints
-this section; it never runs steps 3–6. The live project is
+this section; it never runs steps 3–5. The live project is
 `pykhzrpgdszcwvpydebt`.
 
 ```bash
@@ -390,9 +517,16 @@ node verify.js --schema-only
 # 5. IMPORT (images → pos-assets, products, store, payment methods, stock)
 node import.js --live
 
-# 6. VERIFY + SIGN-IN SMOKE TEST
+# 6. VERIFY (read-only probes; throwaway anon user for the deny tests)
 node verify.js
-scripts/build_apk.sh debug     # install on the booth phone and sign in
+
+# 7. BUILD THE PWA (no deploy; scans the bundle and prints the deploy command)
+node scripts/build-web.js
+
+# 8. DEPLOY (the USER)
+npx wrangler pages deploy build/web --project-name stardom-pos
+# then, ON THE iPAD: open the URL in Safari -> Share -> Add to Home Screen ->
+# open from the icon -> sign in ONCE -> docs/owner-setup.md from step 1.
 ```
 
 Order and preconditions:
@@ -414,13 +548,22 @@ Order and preconditions:
    stock arrives as `stock_events(reason='import')`, and the store row carries no
    invented TIN/PTU/address.
 6. `verify.js` — computed counts (inactive = `isactive=false OR baseprice=0`),
-   the anon probe with a throwaway user, `security_invoker` on `order_status`,
+   the anon probe with a **throwaway** user, `security_invoker` on `order_status`,
    the `pos-assets` bucket private, 5 random images ≤400px, and
    `sum(stock_events) = products.stock_quantity` for every product.
+7. `node scripts/build-web.js` — build the PWA and scan it (no deploy).
+8. Open the deployed URL **on the iPad**, Add to Home Screen, open it from the icon, and sign in
+   ONCE inside the installed app (W1). Follow `docs/owner-setup.md`.
 
-**Local pre-flight (agent-safe, no live DB):** `node --test scripts/` runs the
-PGlite suite — migrations 001→004 applied twice, RLS, append-only enforcement,
-server LWW, the reset prechecks and `register_device`.
+**Local pre-flight (agent-safe, no live DB):** `node --test scripts/*.test.js` runs the PGlite
+suite — migrations 001→004 applied twice, RLS, append-only enforcement, server LWW, the reset
+prechecks, `register_device` — plus the env-whitelist and ₱-glyph checks. `flutter test` runs the
+Dart suite, and `node scripts/offline-test.js` boots the built PWA in Chromium, asserts that no
+CDN was contacted and reloads it with the network off.
+
+**What has NOT been verified here:** real Safari on the iPad (Playwright's WebKit on Windows is
+not iOS Safari), and the storage backend WebKit actually picks — it is REPORTED in Settings and
+on `window.__stardomBootInfo`, never assumed. See `docs/owner-setup.md` for the on-device checks.
 
 **Sync notes that the runbook depends on:** pull cursors are per table
 (`pull_cursor:<table>`), keyset-paged on `server_updated_at` (mutable) and

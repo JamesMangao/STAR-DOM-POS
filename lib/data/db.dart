@@ -32,6 +32,7 @@ enum VoidOutcome { created, alreadyVoided, notFound }
     DayCloses,
     SyncOutbox,
     Settings,
+    ImageCaches,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -44,14 +45,18 @@ class AppDatabase extends _$AppDatabase {
   final DateTime Function() _clock;
 
   /// v2 adds sync_outbox.next_attempt_at (B5 backoff).
+  /// v3 adds the local-only image_cache table (W3, never synced).
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.addColumn(syncOutbox, syncOutbox.nextAttemptAt);
+      }
+      if (from < 3) {
+        await m.createTable(imageCaches);
       }
     },
     beforeOpen: (details) async {
@@ -79,7 +84,105 @@ class AppDatabase extends _$AppDatabase {
 
   static double r2(double v) => (v * 100).round() / 100;
 
+  // --------------------------------------------------------- image cache (W3)
+  // Local-only: the bytes of a product/QR image, so it renders with the
+  // network off. Never enqueued, never pushed, never pulled.
+
+  Future<void> cacheImage({
+    required String path,
+    required Uint8List bytes,
+    required String contentType,
+    DateTime? fetchedAt,
+  }) => into(imageCaches).insertOnConflictUpdate(
+    ImageCachesCompanion(
+      path: Value(path),
+      bytes: Value(bytes),
+      contentType: Value(contentType),
+      fetchedAt: Value(fetchedAt ?? _clock()),
+    ),
+  );
+
+  Future<ImageCache?> cachedImage(String path) async => (select(
+    imageCaches,
+  )..where((t) => t.path.equals(path))).getSingleOrNull();
+
+  /// True when the cached bytes can be rendered without the network.
+  Future<bool> hasImage(String path) async => await cachedImage(path) != null;
+
+  Future<int> cachedImageCount() async {
+    final row = await customSelect(
+      'SELECT COUNT(*) AS n FROM image_caches',
+      readsFrom: {imageCaches},
+    ).getSingle();
+    return row.read<int>('n');
+  }
+
+  Future<int> cachedImageBytes() async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(LENGTH(bytes)), 0) AS n FROM image_caches',
+      readsFrom: {imageCaches},
+    ).getSingle();
+    return row.read<int>('n');
+  }
+
+  // ------------------------------------------------------------- export (W2)
+
+  /// "Export data (JSON)": every LOCAL table, as JSON.
+  ///
+  /// Browser storage can be evicted by the OS even when it was granted
+  /// persistence, and the outbox may hold sales the server has never seen —
+  /// so the owner gets a plain, complete dump he can keep. This is the only
+  /// extra feature W2 allows, and it exists for exactly that reason.
+  Future<Map<String, dynamic>> exportAll() async => {
+    'exported_at': _clock().toIso8601String(),
+    'schema_version': schemaVersion,
+    'stores': [for (final r in await select(stores).get()) r.toJson()],
+    'devices': [for (final r in await select(devices).get()) r.toJson()],
+    'categories': [for (final r in await select(categories).get()) r.toJson()],
+    'products': [for (final r in await select(products).get()) r.toJson()],
+    'payment_methods': [
+      for (final r in await select(paymentMethods).get()) r.toJson(),
+    ],
+    'orders': [for (final r in await select(orders).get()) r.toJson()],
+    'order_items': [for (final r in await select(orderItems).get()) r.toJson()],
+    'payments': [for (final r in await select(payments).get()) r.toJson()],
+    'order_voids': [for (final r in await select(orderVoids).get()) r.toJson()],
+    'stock_events': [
+      for (final r in await select(stockEvents).get()) r.toJson(),
+    ],
+    'day_closes': [for (final r in await select(dayCloses).get()) r.toJson()],
+    'sync_outbox': [for (final r in await select(syncOutbox).get()) r.toJson()],
+    'settings': [for (final r in await select(settings).get()) r.toJson()],
+    // Image bytes are deliberately NOT inlined: this dump is for the SALES,
+    // and a base64 image blob would make it unopenable on a phone.
+    'image_cache_paths': [
+      for (final r in await select(imageCaches).get()) r.path,
+    ],
+  };
+
+  /// W2 data-loss guard: how long the OLDEST unsynced sale has been waiting.
+  /// Null when the outbox is empty.
+  Future<DateTime?> oldestPendingAt(String storeId) async {
+    final row = await customSelect(
+      'SELECT MIN(created_at) AS t FROM sync_outbox '
+      'WHERE store_id = ? AND synced_at IS NULL',
+      variables: [Variable<String>(storeId)],
+      readsFrom: {syncOutbox},
+    ).getSingle();
+    if (row.data['t'] == null) return null;
+    final raw = row.data['t'];
+    if (raw is int) {
+      return DateTime.fromMillisecondsSinceEpoch(raw, isUtc: true);
+    }
+    if (raw is String) return DateTime.tryParse(raw)?.toUtc();
+    return null;
+  }
+
   // ---------------------------------------------------------------- stores
+
+  /// Every store row. This install is expected to hold exactly one, so the
+  /// single row doubles as the bootstrap config (W2).
+  Future<List<Store>> allStores() async => select(stores).get();
 
   Future<Store?> store(String id) async =>
       (select(stores)..where((t) => t.id.equals(id))).getSingleOrNull();

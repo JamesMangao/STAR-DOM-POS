@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/env.dart';
@@ -16,6 +16,9 @@ class Api {
 
   SupabaseClient? _client;
   SupabaseClient get _c => _client!;
+
+  /// The initialised client, for auth and anything else that needs it.
+  SupabaseClient get client => _c;
 
   bool get isReady => _client != null;
 
@@ -113,17 +116,26 @@ class Api {
   static const Duration pushTimeout = Duration(seconds: 20);
 
   /// Classify a transport/provider error into the push policy's vocabulary
-  /// (B5). A timeout, a socket error or a DNS failure is OFFLINE, never a
-  /// failed attempt.
+  /// (B5). A timeout or a network failure is OFFLINE, never a failed attempt.
+  ///
+  /// W2/web: `dart:io` does not exist in the browser, so the network shapes are
+  /// `package:http`'s `ClientException` (what the browser fetch layer raises,
+  /// including `XMLHttpRequestError`) plus `TimeoutException`. The VM's
+  /// `SocketException`/`HttpException` are matched by NAME so one classifier
+  /// serves both compile targets without importing `dart:io` anywhere.
   static PushResult classifyError(Object error) {
     if (error is AuthException) return PushResult.authExpired;
     if (error is PostgrestException) {
       final code = int.tryParse(error.code ?? '');
       return PushPolicy.classify(status: code);
     }
-    if (error is SocketException ||
-        error is TimeoutException ||
-        error is HttpException) {
+    if (error is TimeoutException || error is http.ClientException) {
+      return PushResult.offline;
+    }
+    final name = error.runtimeType.toString();
+    if (name == 'SocketException' ||
+        name == 'HttpException' ||
+        name == 'XMLHttpRequestError') {
       return PushResult.offline;
     }
     return PushResult.failed;
@@ -150,6 +162,13 @@ class Api {
         );
     return path;
   }
+
+  /// W3: the image BYTES for the offline cache. A signed URL is useless
+  /// offline (it expires) and a cross-origin <img> is not reliably cached by
+  /// WebKit, so the bytes are fetched here and stored in the local
+  /// `image_cache` table, which renders with the network off.
+  Future<Uint8List> downloadImage(String path) async =>
+      await _c.storage.from('pos-assets').download(path);
 
   /// Short-lived signed URL for product/QR images.
   Future<String> signedUrl(

@@ -173,7 +173,7 @@ Source: sticky sidebar 250px, nav items radius 11px, active = yellow gradient pi
 
 Paper: white, border `1px --ink`, radius 4px, `--sh-2` + `--stamp`, padding `30px 34px 22px`. Star mark: 44px radius 12px bg `--primary` with `★` in `--yellow` + `--stamp`. Header: 3px double `--ink` border-bottom. KV labels 9px uppercase `--ink-faint`. Items table: 12.5px, dashed row borders `--line-hi`. Total: 2px top / 3px double bottom `--ink` borders, Sora 800 14–15px. Stamp: 118px circle, 4px double `--primary` border, rotated -14°, mono uppercase. Issuer line centered 11px `--ink-soft`.
 
-**[POS]** Receipt preview on screen = same paper look, max-width 340px, centered on `--surface-mid` stage. Print = ESC/POS Bluetooth, monochrome-safe.
+**[POS]** Receipt preview on screen = same paper look, max-width 340px, centered on `--surface-mid` stage. Print = **PDF, 80 mm wide with auto height**, handed to the iPad's share/AirPrint sheet (`ReceiptPrinter` in `lib/data/printing.dart`) — there is no ESC/POS and no Bluetooth. Monochrome-safe, and the title is always "Sales Receipt", never "Official Receipt".
 
 ### 2.9 Alerts / toasts / empty states
 
@@ -196,3 +196,67 @@ Page enter: `.32s cubic-bezier(.16,1,.3,1)` fade + 8px rise. Hover lifts 1–3px
 - Brand: `STAR:DOM` wordmark Sora 800 19px `letter-spacing -.5px` + 9px `--primary` dot with `0 0 0 3px rgba(183,0,17,.12)` halo. Sub: 9.5px `letter-spacing .14em` Sora 700 `--ink-soft`.
 - Logo asset: `stardom-logo.webp` (960×540, hand-drawn yellow star with face, "STAR" green/red/blue, "DOM" white bubble, "by nick" orange). Favicon: `favicon-32.webp`.
 - Focus-visible: `2px solid --primary`, offset 2px. Selection: `--yellow` bg, `--ink` text.
+
+---
+
+## 4. Device rules — iPad 9th gen (A13, 3 GB), standalone PWA
+
+Target: 2160×1620 px @2× = **1080×810 pt landscape / 810×1080 pt portrait**, iPadOS Safari,
+installed via Add to Home Screen (no URL bar, no browser chrome), Wi-Fi-only and often offline.
+These are requirements, not preferences.
+
+### 4.1 Touch
+
+- Every interactive target is **≥ 48 pt**; primary actions ≥ 56 pt, bottom-nav tabs ≥ 56 pt.
+- **No hover, no tooltips, no right-click, no long-press-only affordances.** A long press may open
+  text selection or the iOS callout instead of doing what we wanted.
+- Feedback is immediate (≤ 200 ms); pressed/disabled states are visual, never hover-dependent.
+- The **on-screen keyboard covers the lower part of the screen**: the scaffold resizes for it, the
+  reference-number field (the field that actually gets typed at checkout) must stay visible while
+  the keyboard is up, and every input uses a **font size ≥ 16 px** so Safari does not auto-zoom the
+  page on focus.
+
+### 4.2 Navigation
+
+- Standalone mode has **no browser back button**: every pushed route carries an in-app back button.
+- The iOS **edge-swipe-back must pop the Flutter route, not exit the app** — it is verified on
+  device, because losing the app mid-sale is the failure we are guarding against.
+- No deep links into a screen that needs a parent route.
+
+### 4.3 Canvas and viewport
+
+- `viewport-fit=cover` + `user-scalable=no` (no pinch zoom) in `web/index.html`.
+- `overscroll-behavior: none` and a fixed document: the page behind the Flutter view must not
+  rubber-band while a list is scrolled.
+- Safe-area insets (home indicator at the bottom, rounded corners) are respected by the scaffold.
+
+### 4.4 Performance (3 GB RAM)
+
+- Product images are stored and served at **≤ 400 px** (import resizes to 400×400 WebP).
+- **Lazy builders everywhere** (`ListView.builder`); no screen builds a whole table eagerly.
+- **Never load all orders into memory**: order lists are filtered in SQL and paged.
+- The offline image cache holds bytes in drift, not base64 in memory, and one image is one row.
+
+### 4.5 Fonts, currency and time
+
+- **The peso sign ₱ is U+20B1** and must render from a bundled font. As bundled, `Sora.ttf` is a
+  Latin-1 subset **without U+20B1**; `PlusJakartaSans.ttf` has it. Every Sora style therefore
+  declares `fontFamilyFallback: ['PlusJakartaSans']`, and `ThemeData.fontFamily` is
+  PlusJakartaSans so an un-themed style cannot fall through to a Google-font fetch.
+  `node scripts/font-check.js assets/fonts/*.ttf` fails the build/test run if that stops being true.
+  The receipt PDF is set in PlusJakartaSans for the same reason.
+- **Fonts are bundled assets** (Sora, Plus Jakarta Sans, Material Symbols). No `google_fonts`, no
+  runtime CDN fetch: the booth has no reliable network.
+- Time zone is **Asia/Manila (UTC+8, no DST)**; the business day is the store-local day
+  (`BusinessDate`, `settings.tz_offset_minutes` default 480).
+- **Wake lock:** while the app is visible, request `navigator.wakeLock('screen')` through guarded
+  js interop and ignore failure silently (the booth screen must not sleep).
+
+### 4.6 Installed-app data
+
+- `navigator.storage.persist()` is requested at startup and the ANSWER is shown in Settings
+  (`storage_persisted`) together with the drift storage backend WebKit picked.
+- Unsynced sales older than 24 h raise a persistent banner: *"Unsynced sales on this device.
+  Connect to the internet and tap Sync now. Do not delete the app icon."*
+- Settings offers **Export data (JSON)** — the only extra feature in the shell, justified by the
+  fact that browser storage can be evicted even after `persist()` was granted.

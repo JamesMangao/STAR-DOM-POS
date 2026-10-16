@@ -4,7 +4,14 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { validate, dbUrlProblem, PROJECT_REF } = require('./env');
+const {
+  validate,
+  dbUrlProblem,
+  PROJECT_REF,
+  DART_DEFINE_WHITELIST,
+  NEVER_IN_APP,
+  dartDefineTokens,
+} = require('./env');
 
 // fake JWT with a given payload role — signature is meaningless on purpose
 const fakeJwt = (role) =>
@@ -147,4 +154,39 @@ test('new-style sb_publishable_ anon + sb_secret_ service is accepted', () => {
     SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_FAKE',
   });
   assert.deepEqual(p, []);
+});
+
+// ---- W1: the dart-define whitelist ------------------------------------------
+// The web bundle is public. These three tests are what stops the owner password
+// from ever being compiled into it again.
+
+test('the dart-define whitelist is exactly the two public keys (W1)', () => {
+  assert.deepEqual(DART_DEFINE_WHITELIST, ['SUPABASE_URL', 'SUPABASE_ANON_KEY']);
+});
+
+test('no whitelisted key is a never-in-app key (W1)', () => {
+  for (const k of DART_DEFINE_WHITELIST) {
+    assert.ok(!NEVER_IN_APP.includes(k), `${k} must not be buildable`);
+  }
+  assert.ok(NEVER_IN_APP.includes('OWNER_PASSWORD'));
+  assert.ok(NEVER_IN_APP.includes('OWNER_EMAIL'));
+});
+
+test('dartDefineTokens emits both public values and NO owner credential (W1)', () => {
+  const tokens = dartDefineTokens({
+    SUPABASE_URL: `https://${PROJECT_REF}.supabase.co`,
+    SUPABASE_ANON_KEY: 'sb_publishable_FAKE',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_FAKE',
+    SUPABASE_DB_URL: valid().SUPABASE_DB_URL,
+    OWNER_EMAIL: 'owner@example.com',
+    OWNER_PASSWORD: 'super-secret-owner-password',
+  });
+  assert.equal(tokens.length, 2);
+  assert.ok(tokens.some((t) => t.startsWith('--dart-define=SUPABASE_URL=')));
+  assert.ok(tokens.some((t) => t.startsWith('--dart-define=SUPABASE_ANON_KEY=')));
+  const joined = tokens.join(' ');
+  for (const k of ['OWNER_EMAIL', 'OWNER_PASSWORD', 'SUPABASE_DB_URL']) {
+    assert.ok(!joined.includes(k), `${k} leaked into the build flags`);
+  }
+  assert.ok(!joined.includes('super-secret-owner-password'));
 });

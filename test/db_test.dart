@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:sqlite3/sqlite3.dart';
-// ignore: unused_import - loads the bundled sqlite3 native library for tests
-import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
 import 'package:stardom_pos/data/bundle.dart';
 import 'package:stardom_pos/data/db.dart';
@@ -1256,4 +1254,121 @@ void main() {
       });
     },
   );
+
+  // ----------------------------------------------------- W2 / W3 additions
+  // The web port adds exactly three local-only capabilities: an image cache
+  // that makes a receipt/product image render with the network off, a JSON
+  // export the owner can keep, and the "unsynced sales" clock. Each one is
+  // asserted here, including the fact that NONE of them reach the outbox.
+  group('web shell data (W2 export, W3 image cache)', () {
+    Future<Order> sellOnce() async {
+      await seedStore();
+      await seedDevice();
+      await seedProduct('p1');
+      await seedCashMethod();
+      return db.createOrder(
+        storeId: 'store-1',
+        deviceId: 'device-1',
+        orderNo: 'A1-260115-001',
+        subtotal: 100,
+        discount: 0,
+        total: 100,
+        items: oneItem('p1', qty: 1, price: 100),
+      );
+    }
+
+    test('image cache round-trips bytes and enqueues nothing (W3)', () async {
+      await seedStore();
+      final before = await db.pendingCount('store-1');
+
+      await db.cacheImage(
+        path: 'products/p1.webp',
+        bytes: Uint8List.fromList([1, 2, 3, 4]),
+        contentType: 'image/webp',
+      );
+
+      expect(await db.hasImage('products/p1.webp'), isTrue);
+      expect(await db.hasImage('products/missing.webp'), isFalse);
+      final row = await db.cachedImage('products/p1.webp');
+      expect(row!.contentType, 'image/webp');
+      expect(row.bytes, Uint8List.fromList([1, 2, 3, 4]));
+      expect(await db.cachedImageCount(), 1);
+      expect(await db.cachedImageBytes(), 4);
+
+      // `path` is the primary key: re-caching overwrites the single row.
+      await db.cacheImage(
+        path: 'products/p1.webp',
+        bytes: Uint8List.fromList([9, 9]),
+        contentType: 'image/webp',
+      );
+      expect(await db.cachedImageCount(), 1);
+      expect(await db.cachedImageBytes(), 2);
+
+      // Local-only: an image is never a sync event.
+      expect(await db.pendingCount('store-1'), before);
+    });
+
+    test('Export data (JSON) covers every local table (W2)', () async {
+      await sellOnce();
+      await db.cacheImage(
+        path: 'products/p1.webp',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        contentType: 'image/webp',
+      );
+
+      final dump = await db.exportAll();
+
+      expect(dump['schema_version'], 3);
+      expect((dump['stores'] as List).length, 1);
+      expect((dump['devices'] as List).length, 1);
+      expect((dump['products'] as List).length, 1);
+      expect((dump['orders'] as List).length, 1);
+      expect((dump['order_items'] as List).length, 1);
+      expect((dump['payments'] as List).length, 1);
+      expect((dump['stock_events'] as List).length, 1);
+      // The whole sale must survive a dump, outbox row included.
+      expect((dump['sync_outbox'] as List), isNotEmpty);
+      expect(dump['image_cache_paths'], ['products/p1.webp']);
+      expect(
+        dump.keys,
+        containsAll(<String>[
+          'exported_at',
+          'stores',
+          'devices',
+          'categories',
+          'products',
+          'payment_methods',
+          'orders',
+          'order_items',
+          'payments',
+          'order_voids',
+          'stock_events',
+          'day_closes',
+          'sync_outbox',
+          'settings',
+          'image_cache_paths',
+        ]),
+      );
+    });
+
+    test(
+      'the unsynced-sales clock sees the oldest pending sale (W2)',
+      () async {
+        await seedStore();
+        expect(await db.oldestPendingAt('store-1'), isNull);
+
+        final order = await sellOnce();
+        final oldest = await db.oldestPendingAt('store-1');
+        expect(oldest, isNotNull);
+        expect(oldest!.isBefore(now.add(const Duration(seconds: 5))), isTrue);
+
+        // Once the sale is pushed it is no longer at risk.
+        final pending = await db.pendingOutbox('store-1');
+        expect(pending.length, 1);
+        await db.markOutboxSynced(pending.first.id);
+        expect(await db.oldestPendingAt('store-1'), isNull);
+        expect(order.id, isNotEmpty);
+      },
+    );
+  });
 }

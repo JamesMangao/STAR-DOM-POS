@@ -8200,6 +8200,323 @@ class SettingsCompanion extends UpdateCompanion<Setting> {
   }
 }
 
+class $ImageCachesTable extends ImageCaches
+    with TableInfo<$ImageCachesTable, ImageCache> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ImageCachesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _pathMeta = const VerificationMeta('path');
+  @override
+  late final GeneratedColumn<String> path = GeneratedColumn<String>(
+    'path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bytesMeta = const VerificationMeta('bytes');
+  @override
+  late final GeneratedColumn<Uint8List> bytes = GeneratedColumn<Uint8List>(
+    'bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentTypeMeta = const VerificationMeta(
+    'contentType',
+  );
+  @override
+  late final GeneratedColumn<String> contentType = GeneratedColumn<String>(
+    'content_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [path, bytes, contentType, fetchedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'image_caches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ImageCache> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('path')) {
+      context.handle(
+        _pathMeta,
+        path.isAcceptableOrUnknown(data['path']!, _pathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pathMeta);
+    }
+    if (data.containsKey('bytes')) {
+      context.handle(
+        _bytesMeta,
+        bytes.isAcceptableOrUnknown(data['bytes']!, _bytesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bytesMeta);
+    }
+    if (data.containsKey('content_type')) {
+      context.handle(
+        _contentTypeMeta,
+        contentType.isAcceptableOrUnknown(
+          data['content_type']!,
+          _contentTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_contentTypeMeta);
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {path};
+  @override
+  ImageCache map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ImageCache(
+      path: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}path'],
+      )!,
+      bytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}bytes'],
+      )!,
+      contentType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content_type'],
+      )!,
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ImageCachesTable createAlias(String alias) {
+    return $ImageCachesTable(attachedDatabase, alias);
+  }
+}
+
+class ImageCache extends DataClass implements Insertable<ImageCache> {
+  final String path;
+  final Uint8List bytes;
+  final String contentType;
+  final DateTime fetchedAt;
+  const ImageCache({
+    required this.path,
+    required this.bytes,
+    required this.contentType,
+    required this.fetchedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['path'] = Variable<String>(path);
+    map['bytes'] = Variable<Uint8List>(bytes);
+    map['content_type'] = Variable<String>(contentType);
+    map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    return map;
+  }
+
+  ImageCachesCompanion toCompanion(bool nullToAbsent) {
+    return ImageCachesCompanion(
+      path: Value(path),
+      bytes: Value(bytes),
+      contentType: Value(contentType),
+      fetchedAt: Value(fetchedAt),
+    );
+  }
+
+  factory ImageCache.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ImageCache(
+      path: serializer.fromJson<String>(json['path']),
+      bytes: serializer.fromJson<Uint8List>(json['bytes']),
+      contentType: serializer.fromJson<String>(json['contentType']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'path': serializer.toJson<String>(path),
+      'bytes': serializer.toJson<Uint8List>(bytes),
+      'contentType': serializer.toJson<String>(contentType),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+    };
+  }
+
+  ImageCache copyWith({
+    String? path,
+    Uint8List? bytes,
+    String? contentType,
+    DateTime? fetchedAt,
+  }) => ImageCache(
+    path: path ?? this.path,
+    bytes: bytes ?? this.bytes,
+    contentType: contentType ?? this.contentType,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+  );
+  ImageCache copyWithCompanion(ImageCachesCompanion data) {
+    return ImageCache(
+      path: data.path.present ? data.path.value : this.path,
+      bytes: data.bytes.present ? data.bytes.value : this.bytes,
+      contentType: data.contentType.present
+          ? data.contentType.value
+          : this.contentType,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ImageCache(')
+          ..write('path: $path, ')
+          ..write('bytes: $bytes, ')
+          ..write('contentType: $contentType, ')
+          ..write('fetchedAt: $fetchedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(path, $driftBlobEquality.hash(bytes), contentType, fetchedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ImageCache &&
+          other.path == this.path &&
+          $driftBlobEquality.equals(other.bytes, this.bytes) &&
+          other.contentType == this.contentType &&
+          other.fetchedAt == this.fetchedAt);
+}
+
+class ImageCachesCompanion extends UpdateCompanion<ImageCache> {
+  final Value<String> path;
+  final Value<Uint8List> bytes;
+  final Value<String> contentType;
+  final Value<DateTime> fetchedAt;
+  final Value<int> rowid;
+  const ImageCachesCompanion({
+    this.path = const Value.absent(),
+    this.bytes = const Value.absent(),
+    this.contentType = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ImageCachesCompanion.insert({
+    required String path,
+    required Uint8List bytes,
+    required String contentType,
+    required DateTime fetchedAt,
+    this.rowid = const Value.absent(),
+  }) : path = Value(path),
+       bytes = Value(bytes),
+       contentType = Value(contentType),
+       fetchedAt = Value(fetchedAt);
+  static Insertable<ImageCache> custom({
+    Expression<String>? path,
+    Expression<Uint8List>? bytes,
+    Expression<String>? contentType,
+    Expression<DateTime>? fetchedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (path != null) 'path': path,
+      if (bytes != null) 'bytes': bytes,
+      if (contentType != null) 'content_type': contentType,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ImageCachesCompanion copyWith({
+    Value<String>? path,
+    Value<Uint8List>? bytes,
+    Value<String>? contentType,
+    Value<DateTime>? fetchedAt,
+    Value<int>? rowid,
+  }) {
+    return ImageCachesCompanion(
+      path: path ?? this.path,
+      bytes: bytes ?? this.bytes,
+      contentType: contentType ?? this.contentType,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (path.present) {
+      map['path'] = Variable<String>(path.value);
+    }
+    if (bytes.present) {
+      map['bytes'] = Variable<Uint8List>(bytes.value);
+    }
+    if (contentType.present) {
+      map['content_type'] = Variable<String>(contentType.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ImageCachesCompanion(')
+          ..write('path: $path, ')
+          ..write('bytes: $bytes, ')
+          ..write('contentType: $contentType, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8216,6 +8533,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DayClosesTable dayCloses = $DayClosesTable(this);
   late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $ImageCachesTable imageCaches = $ImageCachesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8234,6 +8552,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     dayCloses,
     syncOutbox,
     settings,
+    imageCaches,
   ];
 }
 
@@ -12149,6 +12468,189 @@ typedef $$SettingsTableProcessedTableManager =
       Setting,
       PrefetchHooks Function()
     >;
+typedef $$ImageCachesTableCreateCompanionBuilder =
+    ImageCachesCompanion Function({
+      required String path,
+      required Uint8List bytes,
+      required String contentType,
+      required DateTime fetchedAt,
+      Value<int> rowid,
+    });
+typedef $$ImageCachesTableUpdateCompanionBuilder =
+    ImageCachesCompanion Function({
+      Value<String> path,
+      Value<Uint8List> bytes,
+      Value<String> contentType,
+      Value<DateTime> fetchedAt,
+      Value<int> rowid,
+    });
+
+class $$ImageCachesTableFilterComposer
+    extends Composer<_$AppDatabase, $ImageCachesTable> {
+  $$ImageCachesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get bytes => $composableBuilder(
+    column: $table.bytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contentType => $composableBuilder(
+    column: $table.contentType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ImageCachesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ImageCachesTable> {
+  $$ImageCachesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get path => $composableBuilder(
+    column: $table.path,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get bytes => $composableBuilder(
+    column: $table.bytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contentType => $composableBuilder(
+    column: $table.contentType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ImageCachesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ImageCachesTable> {
+  $$ImageCachesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get path =>
+      $composableBuilder(column: $table.path, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get bytes =>
+      $composableBuilder(column: $table.bytes, builder: (column) => column);
+
+  GeneratedColumn<String> get contentType => $composableBuilder(
+    column: $table.contentType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+}
+
+class $$ImageCachesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ImageCachesTable,
+          ImageCache,
+          $$ImageCachesTableFilterComposer,
+          $$ImageCachesTableOrderingComposer,
+          $$ImageCachesTableAnnotationComposer,
+          $$ImageCachesTableCreateCompanionBuilder,
+          $$ImageCachesTableUpdateCompanionBuilder,
+          (
+            ImageCache,
+            BaseReferences<_$AppDatabase, $ImageCachesTable, ImageCache>,
+          ),
+          ImageCache,
+          PrefetchHooks Function()
+        > {
+  $$ImageCachesTableTableManager(_$AppDatabase db, $ImageCachesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ImageCachesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ImageCachesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ImageCachesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> path = const Value.absent(),
+                Value<Uint8List> bytes = const Value.absent(),
+                Value<String> contentType = const Value.absent(),
+                Value<DateTime> fetchedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ImageCachesCompanion(
+                path: path,
+                bytes: bytes,
+                contentType: contentType,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String path,
+                required Uint8List bytes,
+                required String contentType,
+                required DateTime fetchedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ImageCachesCompanion.insert(
+                path: path,
+                bytes: bytes,
+                contentType: contentType,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ImageCachesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ImageCachesTable,
+      ImageCache,
+      $$ImageCachesTableFilterComposer,
+      $$ImageCachesTableOrderingComposer,
+      $$ImageCachesTableAnnotationComposer,
+      $$ImageCachesTableCreateCompanionBuilder,
+      $$ImageCachesTableUpdateCompanionBuilder,
+      (
+        ImageCache,
+        BaseReferences<_$AppDatabase, $ImageCachesTable, ImageCache>,
+      ),
+      ImageCache,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -12179,4 +12681,6 @@ class $AppDatabaseManager {
       $$SyncOutboxTableTableManager(_db, _db.syncOutbox);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$ImageCachesTableTableManager get imageCaches =>
+      $$ImageCachesTableTableManager(_db, _db.imageCaches);
 }

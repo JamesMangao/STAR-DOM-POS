@@ -276,6 +276,24 @@ class SyncOutbox extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// W3 — LOCAL-ONLY image cache. This table has no counterpart in Supabase and
+/// is NEVER synced.
+///
+/// A signed URL expires in minutes and a cross-origin `<img>` response is not
+/// reliably served from WebKit's HTTP cache while offline, so the product and
+/// payment-QR images are stored here as bytes and rendered from here. The
+/// column is `path` (the pos-assets object path), which is also the primary
+/// key: re-fetching an image overwrites its one row.
+class ImageCaches extends Table {
+  TextColumn get path => text()();
+  BlobColumn get bytes => blob()();
+  TextColumn get contentType => text().named('content_type')();
+  DateTimeColumn get fetchedAt => dateTime().named('fetched_at')();
+
+  @override
+  Set<Column> get primaryKey => {path};
+}
+
 class Settings extends Table {
   TextColumn get storeId => text().named('store_id')();
   TextColumn get key => text()();

@@ -7,7 +7,7 @@
 // CLI:
 //   node scripts/env.js --check        exit 0/2, print missing key NAMES
 //   node scripts/env.js --validate     exit 0/4, print KEY: expected shape
-//   node scripts/env.js --dart-defines print the 4 whitelisted --dart-define tokens
+//   node scripts/env.js --dart-defines print the whitelisted --dart-define tokens
 'use strict';
 
 const fs = require('fs');
@@ -26,13 +26,18 @@ const REQUIRED_KEYS = [
   'OWNER_PASSWORD',
 ];
 
-const DART_DEFINE_WHITELIST = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
+// W1: the app is now a PUBLIC web bundle, so the whitelist is exactly the two
+// public values. OWNER_EMAIL/OWNER_PASSWORD used to be compiled in and were
+// therefore readable by anyone who opened main.dart.js in devtools; they stay
+// in .env for the Node scripts (import.js creates the owner via the admin API)
+// and are refused as build inputs. `Omit` is `NEVER_IN_APP` below.
+const DART_DEFINE_WHITELIST = ['SUPABASE_URL', 'SUPABASE_ANON_KEY'];
+const NEVER_IN_APP = [
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_DB_URL',
   'OWNER_EMAIL',
   'OWNER_PASSWORD',
 ];
-const NEVER_IN_APP = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_DB_URL'];
 
 const DB_EXAMPLE =
   `postgresql://postgres.${PROJECT_REF}:<password>@<host>.pooler.supabase.com:5432/postgres`;
@@ -205,7 +210,15 @@ function dartDefines() {
       process.exit(3);
     }
   }
-  const env = load();
+  return dartDefineTokens(load());
+}
+
+/**
+ * Build the --dart-define tokens for a given env object (pure, so the guard is
+ * testable without a .env on disk). A key that is not on the whitelist is not
+ * emitted — there is no "add one more" path for OWNER_*.
+ */
+function dartDefineTokens(env) {
   const tokens = [];
   for (const k of DART_DEFINE_WHITELIST) {
     if (env[k]) tokens.push(`--dart-define=${k}=${env[k]}`);
@@ -262,4 +275,5 @@ module.exports = {
   requireKeys,
   requireValid,
   dartDefines,
+  dartDefineTokens,
 };
