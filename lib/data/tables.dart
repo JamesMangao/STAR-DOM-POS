@@ -261,6 +261,12 @@ class SyncOutbox extends Table {
   TextColumn get op => text()();
   TextColumn get payload => text()();
   IntColumn get attempts => integer().withDefault(const Constant(0))();
+
+  /// When this row may be retried (B5). Null = now. Backoff 1s..60s, so a
+  /// flapping connection never burns the 8 attempts in a few seconds.
+  DateTimeColumn get nextAttemptAt =>
+      dateTime().named('next_attempt_at').nullable()();
+
   TextColumn get lastError => text().named('last_error').nullable()();
   DateTimeColumn get createdAt =>
       dateTime().named('created_at').withDefault(currentDateAndTime)();

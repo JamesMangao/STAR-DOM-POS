@@ -33,6 +33,70 @@ class VoidBundle {
   static const stockEvents = 'stock_events';
 }
 
+/// B6: a bundle is pushed one row at a time, PARENTS FIRST.
+///
+/// `order_items`, `payments` and `stock_events` reference `orders`, and RLS on
+/// order_items/order_voids walks up to the parent order, so inserting an item
+/// before its order is rejected. Pushing in this order also means a failure
+/// halfway leaves a valid prefix on the server and the retry replays the whole
+/// bundle (every write is insert-if-absent), which is what makes the push
+/// idempotent: 1 order, N items, 1 payment, N stock events.
+class SalePush {
+  SalePush._();
+
+  static const List<String> tables = [
+    'orders',
+    'order_items',
+    'payments',
+    'stock_events',
+  ];
+
+  /// (table, row) pairs in dependency order.
+  static List<({String table, Map<String, dynamic> row})> rows(
+    Map<String, dynamic> payload,
+  ) {
+    final out = <({String table, Map<String, dynamic> row})>[];
+    final order = payload[SaleBundle.order];
+    if (order is Map<String, dynamic>) out.add((table: 'orders', row: order));
+    for (final r in _list(payload[SaleBundle.items])) {
+      out.add((table: 'order_items', row: r));
+    }
+    final payment = payload[SaleBundle.payment];
+    if (payment is Map<String, dynamic>) {
+      out.add((table: 'payments', row: payment));
+    }
+    for (final r in _list(payload[SaleBundle.stockEvents])) {
+      out.add((table: 'stock_events', row: r));
+    }
+    return out;
+  }
+
+  static List<Map<String, dynamic>> _list(Object? raw) =>
+      raw is List ? raw.whereType<Map<String, dynamic>>().toList() : const [];
+}
+
+/// The void bundle in dependency order: the order_voids row first (its RLS
+/// check needs the order), then the reversal stock events.
+class VoidPush {
+  VoidPush._();
+
+  static const List<String> tables = ['order_voids', 'stock_events'];
+
+  static List<({String table, Map<String, dynamic> row})> rows(
+    Map<String, dynamic> payload,
+  ) {
+    final out = <({String table, Map<String, dynamic> row})>[];
+    final voidRow = payload[VoidBundle.voidRow];
+    if (voidRow is Map<String, dynamic>) {
+      out.add((table: 'order_voids', row: voidRow));
+    }
+    for (final r in SalePush._list(payload[VoidBundle.stockEvents])) {
+      out.add((table: 'stock_events', row: r));
+    }
+    return out;
+  }
+}
+
 /// In-memory stand-in for the server's append-only tables. `_put` reproduces
 /// `ON CONFLICT (id) DO NOTHING`, which is exactly what makes a replayed
 /// bundle a no-op. Used by tests to prove idempotency without a live server.
@@ -46,11 +110,22 @@ class BundleServer {
   final List<Map<String, dynamic>> _ledger = [];
   List<Map<String, dynamic>> get ledger => List.unmodifiable(_ledger);
 
-  bool _put(Map<String, Map<String, dynamic>> table, Map<String, dynamic> row) {
+  /// One row into one table with `ON CONFLICT (id) DO NOTHING`: false when it
+  /// was already there. [table] is the SERVER table name, so a test can drive
+  /// the same per-row writer the Api uses.
+  bool put(String table, Map<String, dynamic> row) {
     final id = row['id'] as String;
-    if (table.containsKey(id)) return false; // ON CONFLICT DO NOTHING
-    table[id] = row;
-    _ledger.add({'table': row['_table'], 'id': id});
+    final target = switch (table) {
+      'orders' => orders,
+      'order_items' => items,
+      'payments' => payments,
+      'stock_events' => stockEvents,
+      'order_voids' => voids,
+      _ => throw ArgumentError('unknown table $table'),
+    };
+    if (target.containsKey(id)) return false; // ON CONFLICT DO NOTHING
+    target[id] = {...row, '_table': table};
+    _ledger.add({'table': table, 'id': id});
     return true;
   }
 
@@ -58,31 +133,19 @@ class BundleServer {
   /// (0 on a replayed bundle).
   int apply(Map<String, dynamic> payload) {
     var written = 0;
-
-    final order = payload[SaleBundle.order];
-    if (order is Map<String, dynamic>) {
-      if (_put(orders, {...order, '_table': 'orders'})) written++;
+    for (final r in SalePush.rows(payload)) {
+      if (put(r.table, r.row)) written++;
     }
-    final payment = payload[SaleBundle.payment];
-    if (payment is Map<String, dynamic>) {
-      if (_put(payments, {...payment, '_table': 'payments'})) written++;
-    }
-    final items = payload[SaleBundle.items];
-    if (items is List) {
-      for (final r in items.cast<Map<String, dynamic>>()) {
-        if (_put(this.items, {...r, '_table': 'order_items'})) written++;
-      }
-    }
-    final stock = payload[SaleBundle.stockEvents];
-    if (stock is List) {
-      for (final r in stock.cast<Map<String, dynamic>>()) {
-        if (_put(stockEvents, {...r, '_table': 'stock_events'})) written++;
-      }
-    }
-    final voidRow = payload[VoidBundle.voidRow];
-    if (voidRow is Map<String, dynamic>) {
-      if (_put(voids, {...voidRow, '_table': 'order_voids'})) written++;
+    for (final r in VoidPush.rows(payload)) {
+      if (put(r.table, r.row)) written++;
     }
     return written;
   }
+
+  int get totalRows =>
+      orders.length +
+      items.length +
+      payments.length +
+      stockEvents.length +
+      voids.length;
 }

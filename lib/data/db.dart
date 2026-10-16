@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import 'bundle.dart';
 import 'logic.dart';
+import 'sync_policy.dart';
 import 'tables.dart';
 
 part 'db.g.dart';
@@ -42,11 +43,17 @@ class AppDatabase extends _$AppDatabase {
 
   final DateTime Function() _clock;
 
+  /// v2 adds sync_outbox.next_attempt_at (B5 backoff).
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(syncOutbox, syncOutbox.nextAttemptAt);
+      }
+    },
     beforeOpen: (details) async {
       await customStatement(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_products_store_barcode '
@@ -262,11 +269,7 @@ class AppDatabase extends _$AppDatabase {
     required String storeId,
   }) async {
     final now = _clock();
-    final eventId = OutboxEventId.of(
-      'stock',
-      '$productId:$reason:$delta',
-      now,
-    );
+    final eventId = OutboxEventId.of('stock', '$productId:$reason:$delta', now);
     await into(stockEvents).insert(
       StockEventsCompanion(
         id: Value(eventId),
@@ -325,9 +328,7 @@ class AppDatabase extends _$AppDatabase {
           .get();
 
   Future<PaymentMethod?> paymentMethodById(String id) async =>
-      (select(
-        paymentMethods,
-      )..where((t) => t.id.equals(id))).getSingleOrNull();
+      (select(paymentMethods)..where((t) => t.id.equals(id))).getSingleOrNull();
 
   Future<void> upsertPaymentMethod(
     PaymentMethod pm, {
@@ -348,7 +349,8 @@ class AppDatabase extends _$AppDatabase {
         requireReference: Value(pm.requireReference),
         isEnabled: Value(pm.isEnabled),
         sortOrder: Value(pm.sortOrder),
-        createdAt: Value(now),
+        // B9: was `Value(now)`, which rewrote created_at on every edit.
+        createdAt: Value(pm.createdAt),
         updatedAt: Value(now),
         deletedAt: Value(pm.deletedAt),
         syncedAt: const Value.absent(),
@@ -389,10 +391,15 @@ class AppDatabase extends _$AppDatabase {
 
   /// Next sequence for this device+day: count of that store's orders with the
   /// {device_code}-{YYMMDD}- prefix, + 1. Called INSIDE the sale transaction.
+  /// B9: counted in SQL — it used to load every order row into memory.
   Future<int> dailyOrderSeq(String deviceCode, String dayKey) async {
     final prefix = '$deviceCode-$dayKey-';
-    final rows = await select(orders).get();
-    return rows.where((o) => o.orderNo.startsWith(prefix)).length + 1;
+    final row = await customSelect(
+      'SELECT COUNT(*) AS n FROM orders WHERE order_no LIKE ?',
+      variables: [Variable.withString('$prefix%')],
+      readsFrom: {orders},
+    ).getSingle();
+    return row.read<int>('n') + 1;
   }
 
   Future<Order?> orderById(String id) async =>
@@ -406,9 +413,9 @@ class AppDatabase extends _$AppDatabase {
     return row != null;
   }
 
-  Future<OrderVoid?> voidFor(String orderId) async =>
-      (select(orderVoids)..where((t) => t.orderId.equals(orderId)))
-          .getSingleOrNull();
+  Future<OrderVoid?> voidFor(String orderId) async => (select(
+    orderVoids,
+  )..where((t) => t.orderId.equals(orderId))).getSingleOrNull();
 
   /// The ONE helper every total uses: orders with NO order_voids row.
   /// Reports, End-of-Day and Close Day all funnel through here.
@@ -436,26 +443,47 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// The store's configured UTC offset in minutes (settings `tz_offset_minutes`,
+  /// default 480 = Manila). B8.
+  Future<int> tzOffsetMinutes(String storeId) async {
+    final s = await getSetting(storeId, 'tz_offset_minutes');
+    final parsed = int.tryParse(s?.value ?? '');
+    return parsed ?? BusinessDate.defaultTzOffsetMinutes;
+  }
+
   Future<List<Order>> _ordersMatching(
     String storeId, {
     DateTime? businessDate,
     bool includeVoided = true,
     bool onlyVoided = false,
   }) async {
-    final voidedIds = (await select(orderVoids).get())
-        .map((v) => v.orderId)
-        .toSet();
-    final rows = await (select(
-      orders,
-    )..where((t) => t.storeId.equals(storeId))).get();
+    final voidedIds = (await select(
+      orderVoids,
+    ).get()).map((v) => v.orderId).toSet();
+
+    // B9: the day filter runs in SQL (the old version loaded every order and
+    // filtered in Dart). B8: the day is the STORE-LOCAL day.
+    final q = select(orders)..where((t) => t.storeId.equals(storeId));
+    if (businessDate != null) {
+      final tz = await tzOffsetMinutes(storeId);
+      final start = BusinessDate.startOfDayUtc(
+        businessDate,
+        tzOffsetMinutes: tz,
+      );
+      final end = start.add(const Duration(days: 1));
+      q.where(
+        (t) =>
+            t.createdAt.isBiggerOrEqualValue(start) &
+            t.createdAt.isSmallerThanValue(end),
+      );
+    }
+    final rows = await q.get();
+
     final result = <Order>[];
     for (final o in rows) {
       final isVoid = voidedIds.contains(o.id);
       if (!includeVoided && isVoid) continue;
       if (onlyVoided && !isVoid) continue;
-      if (businessDate != null && !BusinessDate.sameDay(o.createdAt, businessDate)) {
-        continue;
-      }
       result.add(o);
     }
     result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -496,7 +524,11 @@ class AppDatabase extends _$AppDatabase {
   /// Creates an order + items + payment + stock deltas + outbox bundle in ONE
   /// transaction. `order_no` is allocated INSIDE the transaction when omitted:
   /// order_no = {device_code}-{YYMMDD}-{seq}, seq = this store's orders with
-  /// that prefix for the UTC day + 1. Returns the created order row.
+  /// that prefix for the STORE-LOCAL day + 1. Returns the created order row.
+  ///
+  /// B7: the device code comes from the server (register_device), because
+  /// order_no is globally unique and two devices inventing their own code would
+  /// collide forever. A sale cannot be created before that registration.
   Future<Order> createOrder({
     required String storeId,
     required String deviceId,
@@ -520,9 +552,18 @@ class AppDatabase extends _$AppDatabase {
       var no = orderNo;
       if (no == null) {
         final device = await deviceById(deviceId);
-        final code = device?.deviceCode ?? 'D0';
-        final seq = await dailyOrderSeq(code, OrderNo.dayKey(now));
-        no = OrderNo.generate(code, now, seq);
+        final code = device?.deviceCode ?? '';
+        if (code.isEmpty) {
+          throw StateError(
+            'device $deviceId has no server-assigned code: register it first',
+          );
+        }
+        final tz = await tzOffsetMinutes(storeId);
+        final seq = await dailyOrderSeq(
+          code,
+          OrderNo.dayKey(now, tzOffsetMinutes: tz),
+        );
+        no = OrderNo.generate(code, now, seq, tzOffsetMinutes: tz);
       }
 
       final orderId = OutboxEventId.of('order', '$storeId:$no', now);
@@ -803,9 +844,7 @@ class AppDatabase extends _$AppDatabase {
         orderId: Value(orderId),
         deviceId: Value((row['device_id'] as String?) ?? ''),
         reason: Value((row['reason'] as String?) ?? ''),
-        voidedAt: Value(
-          DateTime.parse(row['voided_at'] as String).toUtc(),
-        ),
+        voidedAt: Value(DateTime.parse(row['voided_at'] as String).toUtc()),
         createdAt: Value(
           row['created_at'] == null
               ? _clock()
@@ -841,9 +880,15 @@ class AppDatabase extends _$AppDatabase {
     required String deviceId,
     required DateTime businessDate,
   }) async {
-    final day = BusinessDate.startOfDayUtc(businessDate);
+    final day = BusinessDate.startOfDayUtc(
+      businessDate,
+      tzOffsetMinutes: await tzOffsetMinutes(storeId),
+    );
     return (select(dayCloses)..where(
-          (t) => t.storeId.equals(storeId) & t.deviceId.equals(deviceId) & t.businessDate.equals(day),
+          (t) =>
+              t.storeId.equals(storeId) &
+              t.deviceId.equals(deviceId) &
+              t.businessDate.equals(day),
         ))
         .getSingleOrNull();
   }
@@ -859,7 +904,10 @@ class AppDatabase extends _$AppDatabase {
     String? closedBy,
   }) async {
     final now = _clock();
-    final day = BusinessDate.startOfDayUtc(businessDate);
+    final day = BusinessDate.startOfDayUtc(
+      businessDate,
+      tzOffsetMinutes: await tzOffsetMinutes(storeId),
+    );
     final expected = await cashExpected(
       storeId: storeId,
       businessDate: day,
@@ -868,10 +916,14 @@ class AppDatabase extends _$AppDatabase {
     );
     final variance = cashActual == null ? null : r2(cashActual - expected);
 
-    final existing = await (select(dayCloses)..where(
-          (t) => t.storeId.equals(storeId) & t.deviceId.equals(deviceId) & t.businessDate.equals(day),
-        ))
-        .getSingleOrNull();
+    final existing =
+        await (select(dayCloses)..where(
+              (t) =>
+                  t.storeId.equals(storeId) &
+                  t.deviceId.equals(deviceId) &
+                  t.businessDate.equals(day),
+            ))
+            .getSingleOrNull();
 
     if (existing != null) {
       await (update(dayCloses)..where((t) => t.id.equals(existing.id))).write(
@@ -1051,27 +1103,17 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .get();
 
-  Future<int> pendingCount(String storeId) async => (await pendingOutbox(storeId)).length;
+  Future<int> pendingCount(String storeId) async =>
+      (await pendingOutbox(storeId)).length;
 
   Future<void> markOutboxSynced(String id) async =>
       (update(syncOutbox)..where((t) => t.id.equals(id))).write(
         SyncOutboxCompanion(
           syncedAt: Value(_clock()),
+          nextAttemptAt: const Value.absent(),
           lastError: const Value.absent(),
         ),
       );
-
-  Future<void> markOutboxFailed(String id, String error) async {
-    final row = await (select(
-      syncOutbox,
-    )..where((t) => t.id.equals(id))).getSingleOrNull();
-    await (update(syncOutbox)..where((t) => t.id.equals(id))).write(
-      SyncOutboxCompanion(
-        attempts: Value((row?.attempts ?? 0) + 1),
-        lastError: Value(error),
-      ),
-    );
-  }
 
   Future<void> retryOutbox(String id) async =>
       (update(syncOutbox)..where((t) => t.id.equals(id))).write(
@@ -1080,6 +1122,414 @@ class AppDatabase extends _$AppDatabase {
           lastError: const Value.absent(),
         ),
       );
+
+  // -------------------------------------------- pull cursors (B4)
+
+  /// The per-table pull cursor. LOCAL device state: stored in settings under
+  /// `pull_cursor:<table>` and NEVER enqueued, because it is not store data.
+  Future<PullCursor> getPullCursor(String storeId, String table) async {
+    final s = await getSetting(storeId, PullPlan.cursorKey(table));
+    return PullCursor.parse(s?.value);
+  }
+
+  Future<void> setPullCursor(String storeId, String table, PullCursor cursor) =>
+      setLocalSetting(storeId, PullPlan.cursorKey(table), cursor.describe());
+
+  /// A setting that is written locally and never pushed (cursors, flags).
+  Future<void> setLocalSetting(String storeId, String key, String value) async {
+    await into(settings).insertOnConflictUpdate(
+      SettingsCompanion(
+        storeId: Value(storeId),
+        key: Value(key),
+        value: Value(value),
+        updatedAt: Value(_clock()),
+        syncedAt: const Value.absent(),
+      ),
+    );
+  }
+
+  // ------------------------------------------- remote apply (B1, B2, B3)
+
+  DateTime? _ts(Object? v) =>
+      v == null ? null : DateTime.tryParse(v.toString())?.toUtc();
+
+  /// Apply one pulled row. NEVER enqueues (a pulled row must not be pushed
+  /// straight back), keeps the SERVER's created_at/updated_at, and applies
+  /// last-write-wins on EVERY mutable table. Returns true if it changed
+  /// something. Append-only rows insert with DO NOTHING.
+  Future<bool> applyRemoteRow(String table, Map<String, dynamic> row) async {
+    switch (table) {
+      case 'stores':
+        return _applyRemoteStore(row);
+      case 'devices':
+        return _applyRemoteDevice(row);
+      case 'categories':
+        return _applyRemoteCategory(row);
+      case 'products':
+        return _applyRemoteProduct(row);
+      case 'payment_methods':
+        return _applyRemotePaymentMethod(row);
+      case 'settings':
+        return _applyRemoteSetting(row);
+      case 'day_closes':
+        return _applyRemoteDayClose(row);
+      case 'orders':
+        if (await orderById(row['id'] as String) != null) return false;
+        await into(orders).insert(
+          OrdersCompanion(
+            id: Value(row['id'] as String),
+            storeId: Value(row['store_id'] as String),
+            deviceId: Value(row['device_id'] as String),
+            orderNo: Value(row['order_no'] as String),
+            subtotal: Value((row['subtotal'] as num).toDouble()),
+            discount: Value((row['discount'] as num).toDouble()),
+            total: Value((row['total'] as num).toDouble()),
+            note: Value((row['note'] as String?) ?? ''),
+            paymentMethodId: Value(row['payment_method_id'] as String?),
+            amountReceived: Value((row['amount_received'] as num?)?.toDouble()),
+            changeAmount: Value((row['change_amount'] as num?)?.toDouble()),
+            referenceNo: Value((row['reference_no'] as String?) ?? ''),
+            status: Value((row['status'] as String?) ?? 'completed'),
+            createdAt: Value(_ts(row['created_at']) ?? _clock()),
+            updatedAt: Value(_ts(row['updated_at']) ?? _clock()),
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+        return true;
+      case 'order_items':
+        if (await (select(orderItems)
+                  ..where((t) => t.id.equals(row['id'] as String)))
+                .getSingleOrNull() !=
+            null) {
+          return false;
+        }
+        await into(orderItems).insert(
+          OrderItemsCompanion(
+            id: Value(row['id'] as String),
+            orderId: Value(row['order_id'] as String),
+            productId: Value(row['product_id'] as String?),
+            productName: Value(row['product_name'] as String),
+            unitPrice: Value((row['unit_price'] as num).toDouble()),
+            quantity: Value((row['quantity'] as num).toInt()),
+            lineTotal: Value((row['line_total'] as num).toDouble()),
+            createdAt: Value(_ts(row['created_at']) ?? _clock()),
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+        return true;
+      case 'payments':
+        if (await (select(payments)
+                  ..where((t) => t.id.equals(row['id'] as String)))
+                .getSingleOrNull() !=
+            null) {
+          return false;
+        }
+        await into(payments).insert(
+          PaymentsCompanion(
+            id: Value(row['id'] as String),
+            storeId: Value(row['store_id'] as String),
+            deviceId: Value(row['device_id'] as String),
+            orderId: Value(row['order_id'] as String),
+            methodId: Value(row['method_id'] as String?),
+            methodName: Value((row['method_name'] as String?) ?? ''),
+            methodType: Value((row['method_type'] as String?) ?? ''),
+            amount: Value((row['amount'] as num).toDouble()),
+            amountReceived: Value((row['amount_received'] as num?)?.toDouble()),
+            changeAmount: Value((row['change_amount'] as num?)?.toDouble()),
+            referenceNo: Value((row['reference_no'] as String?) ?? ''),
+            createdAt: Value(_ts(row['created_at']) ?? _clock()),
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+        return true;
+      case 'stock_events':
+        if (await (select(stockEvents)
+                  ..where((t) => t.id.equals(row['id'] as String)))
+                .getSingleOrNull() !=
+            null) {
+          return false;
+        }
+        await into(stockEvents).insert(
+          StockEventsCompanion(
+            id: Value(row['id'] as String),
+            storeId: Value(row['store_id'] as String),
+            productId: Value(row['product_id'] as String),
+            delta: Value((row['delta'] as num).toInt()),
+            reason: Value(row['reason'] as String),
+            orderId: Value(row['order_id'] as String?),
+            deviceId: Value(row['device_id'] as String?),
+            createdAt: Value(_ts(row['created_at']) ?? _clock()),
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+        // B2: the mirror is DERIVED from the events, never taken from a row.
+        await rebuildStockMirror(row['product_id'] as String);
+        return true;
+      case 'order_voids':
+        return applyRemoteVoid(row);
+      default:
+        return false;
+    }
+  }
+
+  Future<bool> _applyRemoteStore(Map<String, dynamic> row) async {
+    final id = row['id'] as String;
+    final existing = await store(id);
+    final serverUpdated = _ts(row['updated_at']);
+    if (!LastWriteWins.serverWins(
+      localUpdatedAt: existing?.updatedAt,
+      serverUpdatedAt: serverUpdated,
+    )) {
+      return false;
+    }
+    await into(stores).insertOnConflictUpdate(
+      StoresCompanion(
+        id: Value(id),
+        name: Value(row['name'] as String),
+        tagline: Value((row['tagline'] as String?) ?? ''),
+        ownerId: Value((row['owner_id'] as String?) ?? ''),
+        receiptName: Value((row['receipt_name'] as String?) ?? ''),
+        receiptTin: Value((row['receipt_tin'] as String?) ?? ''),
+        receiptAddress: Value((row['receipt_address'] as String?) ?? ''),
+        receiptAccreditation: Value(
+          (row['receipt_accreditation'] as String?) ?? '',
+        ),
+        receiptFooter: Value((row['receipt_footer'] as String?) ?? ''),
+        currency: Value((row['currency'] as String?) ?? 'PHP'),
+        createdAt: Value(
+          _ts(row['created_at']) ?? existing?.createdAt ?? _clock(),
+        ),
+        updatedAt: Value(serverUpdated ?? existing?.updatedAt ?? _clock()),
+      ),
+    );
+    return true;
+  }
+
+  Future<bool> _applyRemoteDevice(Map<String, dynamic> row) async {
+    final id = row['id'] as String;
+    final existing = await deviceById(id);
+    final serverUpdated = _ts(row['updated_at']);
+    if (!LastWriteWins.serverWins(
+      localUpdatedAt: existing?.updatedAt,
+      serverUpdatedAt: serverUpdated,
+    )) {
+      return false;
+    }
+    await into(devices).insertOnConflictUpdate(
+      DevicesCompanion(
+        id: Value(id),
+        storeId: Value(row['store_id'] as String),
+        deviceName: Value((row['device_name'] as String?) ?? 'Phone'),
+        deviceCode: Value((row['device_code'] as String?) ?? ''),
+        isActive: Value(row['is_active'] as bool? ?? true),
+        lastSyncAt: Value(_ts(row['last_sync_at'])),
+        createdAt: Value(
+          _ts(row['created_at']) ?? existing?.createdAt ?? _clock(),
+        ),
+        updatedAt: Value(serverUpdated ?? existing?.updatedAt ?? _clock()),
+      ),
+    );
+    return true;
+  }
+
+  Future<bool> _applyRemoteCategory(Map<String, dynamic> row) async {
+    final id = row['id'] as String;
+    final existing = await (select(
+      categories,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    final serverUpdated = _ts(row['updated_at']);
+    if (!LastWriteWins.serverWins(
+      localUpdatedAt: existing?.updatedAt,
+      serverUpdatedAt: serverUpdated,
+    )) {
+      return false;
+    }
+    await into(categories).insertOnConflictUpdate(
+      CategoriesCompanion(
+        id: Value(id),
+        storeId: Value(row['store_id'] as String),
+        name: Value(row['name'] as String),
+        sortOrder: Value((row['sort_order'] as num?)?.toInt() ?? 0),
+        isActive: Value(row['is_active'] as bool? ?? true),
+        createdAt: Value(
+          _ts(row['created_at']) ?? existing?.createdAt ?? _clock(),
+        ),
+        updatedAt: Value(serverUpdated ?? existing?.updatedAt ?? _clock()),
+        deletedAt: Value(_ts(row['deleted_at'])),
+      ),
+    );
+    return true;
+  }
+
+  Future<bool> _applyRemoteProduct(Map<String, dynamic> row) async {
+    final id = row['id'] as String;
+    final existing = await productById(id);
+    final serverUpdated = _ts(row['updated_at']);
+    if (!LastWriteWins.serverWins(
+      localUpdatedAt: existing?.updatedAt,
+      serverUpdatedAt: serverUpdated,
+    )) {
+      return false;
+    }
+    await into(products).insertOnConflictUpdate(
+      ProductsCompanion(
+        id: Value(id),
+        storeId: Value(row['store_id'] as String),
+        categoryId: Value(row['category_id'] as String?),
+        name: Value(row['name'] as String),
+        price: Value((row['price'] as num).toDouble()),
+        barcode: Value(row['barcode'] as String?),
+        imagePath: Value(row['image_path'] as String?),
+        // B2: stock_quantity is a MIRROR of the events, never a remote value.
+        stockQuantity: existing == null ? const Value(0) : const Value.absent(),
+        isActive: Value(row['is_active'] as bool? ?? true),
+        createdAt: Value(
+          _ts(row['created_at']) ?? existing?.createdAt ?? _clock(),
+        ),
+        updatedAt: Value(serverUpdated ?? existing?.updatedAt ?? _clock()),
+        deletedAt: Value(_ts(row['deleted_at'])),
+      ),
+    );
+    await rebuildStockMirror(id);
+    return true;
+  }
+
+  Future<bool> _applyRemotePaymentMethod(Map<String, dynamic> row) async {
+    final id = row['id'] as String;
+    final existing = await paymentMethodById(id);
+    final serverUpdated = _ts(row['updated_at']);
+    if (!LastWriteWins.serverWins(
+      localUpdatedAt: existing?.updatedAt,
+      serverUpdatedAt: serverUpdated,
+    )) {
+      return false;
+    }
+    await into(paymentMethods).insertOnConflictUpdate(
+      PaymentMethodsCompanion(
+        id: Value(id),
+        storeId: Value(row['store_id'] as String),
+        name: Value(row['name'] as String),
+        type: Value(row['type'] as String),
+        color: Value((row['color'] as String?) ?? '#B70011'),
+        qrImagePath: Value(row['qr_image_path'] as String?),
+        accountName: Value((row['account_name'] as String?) ?? ''),
+        accountNumber: Value((row['account_number'] as String?) ?? ''),
+        requireReference: Value(row['require_reference'] as bool? ?? false),
+        isEnabled: Value(row['is_enabled'] as bool? ?? true),
+        sortOrder: Value((row['sort_order'] as num?)?.toInt() ?? 0),
+        createdAt: Value(
+          _ts(row['created_at']) ?? existing?.createdAt ?? _clock(),
+        ),
+        updatedAt: Value(serverUpdated ?? existing?.updatedAt ?? _clock()),
+        deletedAt: Value(_ts(row['deleted_at'])),
+      ),
+    );
+    return true;
+  }
+
+  Future<bool> _applyRemoteSetting(Map<String, dynamic> row) async {
+    final storeId = row['store_id'] as String;
+    final key = row['key'] as String;
+    final existing = await getSetting(storeId, key);
+    final serverUpdated = _ts(row['updated_at']);
+    if (!LastWriteWins.serverWins(
+      localUpdatedAt: existing?.updatedAt,
+      serverUpdatedAt: serverUpdated,
+    )) {
+      return false;
+    }
+    final value = (row['value'] as String?) ?? '';
+    await into(settings).insertOnConflictUpdate(
+      SettingsCompanion(
+        storeId: Value(storeId),
+        key: Value(key),
+        value: Value(value),
+        updatedAt: Value(serverUpdated ?? existing?.updatedAt ?? _clock()),
+      ),
+    );
+    return true;
+  }
+
+  Future<bool> _applyRemoteDayClose(Map<String, dynamic> row) async {
+    final id = row['id'] as String;
+    final existing = await (select(
+      dayCloses,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    final serverUpdated = _ts(row['updated_at']);
+    if (!LastWriteWins.serverWins(
+      localUpdatedAt: existing?.updatedAt,
+      serverUpdatedAt: serverUpdated,
+    )) {
+      return false;
+    }
+    await into(dayCloses).insertOnConflictUpdate(
+      DayClosesCompanion(
+        id: Value(id),
+        storeId: Value(row['store_id'] as String),
+        deviceId: Value(row['device_id'] as String),
+        businessDate: Value(_ts(row['business_date']) ?? _clock()),
+        cashExpected: Value((row['cash_expected'] as num?)?.toDouble()),
+        cashActual: Value((row['cash_actual'] as num?)?.toDouble()),
+        variance: Value((row['variance'] as num?)?.toDouble()),
+        closedBy: Value(row['closed_by'] as String?),
+        createdAt: Value(
+          _ts(row['created_at']) ?? existing?.createdAt ?? _clock(),
+        ),
+        updatedAt: Value(serverUpdated ?? existing?.updatedAt ?? _clock()),
+      ),
+    );
+    return true;
+  }
+
+  /// Recompute the display cache from the events WITHOUT touching updated_at
+  /// (B2): the row's LWW timestamp must stay the server's, not ours.
+  Future<int> rebuildStockMirror(String productId) async {
+    final total = await stockOf(productId);
+    await (update(products)..where((t) => t.id.equals(productId))).write(
+      ProductsCompanion(stockQuantity: Value(total)),
+    );
+    return total;
+  }
+
+  /// Rebuild every mirror (after a full pull of stock_events).
+  Future<void> rebuildStockMirrors() async {
+    final rows = await select(products).get();
+    for (final p in rows) {
+      await rebuildStockMirror(p.id);
+    }
+  }
+
+  // ------------------------------------------- outbox state (B5)
+
+  OutboxState outboxState(SyncOutboxData e) => OutboxState(
+    attempts: e.attempts,
+    nextAttemptAt: e.nextAttemptAt,
+    synced: e.syncedAt != null,
+    lastError: e.lastError,
+  );
+
+  /// Park/backoff a row after a REAL failure (never after being offline).
+  Future<void> markOutboxFailed(
+    String id,
+    String error, {
+    required int attempts,
+    DateTime? nextAttemptAt,
+  }) async {
+    await (update(syncOutbox)..where((t) => t.id.equals(id))).write(
+      SyncOutboxCompanion(
+        attempts: Value(attempts),
+        nextAttemptAt: Value(nextAttemptAt),
+        lastError: Value(error),
+      ),
+    );
+  }
+
+  /// A device that is merely OFFLINE: nothing changes, nothing is parked.
+  Future<void> markOutboxOffline(String id, String error) async {
+    await (update(syncOutbox)..where((t) => t.id.equals(id))).write(
+      SyncOutboxCompanion(lastError: Value(error)),
+    );
+  }
 
   // ---------------------------------------------------- JSON serialisation
 

@@ -333,3 +333,97 @@ flutter build apk --release \
 ```
 
 Android manifest: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`, `INTERNET`, `ACCESS_NETWORK_STATE`. minSdk 23, targetSdk 34.
+
+### 10.1 APK secret scan — what it proves, and what it does not
+
+`scripts/apk-secret-scan.js` unzips an APK to a temp dir, scans every file's
+bytes for `SUPABASE_SERVICE_ROLE_KEY` and the `SUPABASE_DB_URL` password, plants
+both needles into a stub file to prove the scan can actually see them, then
+deletes the temp dir. It prints hit COUNTS only — never a value.
+
+**Measured limit (do not trust a bare `found=0`):** `Env.*` is
+`String.fromEnvironment`, so Dart tree-shakes any constant the app never reads.
+In the placeholder build the debug APK contains no anon key, no URL and no owner
+email at all — `CONTROL TIER2 (SUPABASE_URL host) found=0` — while a compiled
+string literal is found — `CONTROL TIER1 (STAR:DOM POS) found=1`. Until the app
+reads `Env.*`, a clean scan of the server secrets proves nothing about them,
+which is why TIER2 controls exist.
+
+**Mandatory release step (Part B):**
+
+```bash
+scripts/build_apk.sh release
+node scripts/apk-secret-scan.js build/app/outputs/flutter-apk/app-release.apk --require-dart-defines
+```
+
+Required result: `CONTROL TIER1 = 1`; `CONTROL TIER2` SUPABASE_URL host `= 1`
+and OWNER_EMAIL `= 1` (i.e. the app really does read `Env.*`);
+`SUPABASE_SERVICE_ROLE_KEY = 0`; `SUPABASE_DB_PASSWORD = 0`;
+`SELF-TEST overall: OK`. With `--require-dart-defines` any TIER2 zero is a
+non-zero exit — a scan that cannot see the dart-define values must never be
+reported as proof that the secrets are absent.
+
+---
+
+## 11. Stage 2 runbook (print only — DO NOT RUN FROM AN AGENT)
+
+Everything below is executed BY THE USER, in his own terminal. An agent prints
+this section; it never runs steps 3–6. The live project is
+`pykhzrpgdszcwvpydebt`.
+
+```bash
+# 1. EXPORT (read-only SELECTs; writes supabase/export/ + manifest.json)
+cd scripts && node export.js
+node export.js --verify          # byte-compare + QR sha256 + DEEP-EQUAL per file
+
+# 2. IMPORT DRY CHECK (no writes; prints the plan and every rule it would apply)
+node import.js --dry
+
+# 3. RESET — THE USER ONLY. TTY prompts, exact project ref, CONFIRM RESET.
+node reset.js --ref pykhzrpgdszcwvpydebt            # dry run, first
+node reset.js --execute --ref pykhzrpgdszcwvpydebt  # then, in a real terminal
+
+# 4. MIGRATIONS 001 → 004
+#    Apply supabase/migrations/*.sql in order, then:
+node verify.js --schema-only
+
+# 5. IMPORT (images → pos-assets, products, store, payment methods, stock)
+node import.js --live
+
+# 6. VERIFY + SIGN-IN SMOKE TEST
+node verify.js
+scripts/build_apk.sh debug     # install on the booth phone and sign in
+```
+
+Order and preconditions:
+
+1. `export.js` — read-only. Re-run until both files are `DEEP-EQUAL y` and the
+   QR sha256 pair is `IDENTICAL`; `manifest.json` must carry the host label only.
+2. `import.js --dry` — refuses a re-run unless `--force` (settings key
+   `import_completed_at`), and `--force` is still `ON CONFLICT DO NOTHING`.
+3. `reset.js --execute` — refuses to run unless stdin AND stdout are a TTY, then
+   asks for the project ref and `CONFIRM RESET`. It runs `supabase/reset/reset.sql`
+   verbatim (single source of truth), then deletes the `assets` bucket through
+   the Storage API: **44 objects, 35,144,842 bytes, no backup, not recoverable**.
+   The dry run prints `sha256(reset.sql)` and the object count/bytes first.
+4. Migrations 001→004 are the POS schema. 004 adds `register_device()`, which
+   assigns each device its 2-character code — the app cannot ring a sale before
+   that call succeeds, so the FIRST device must sign in while online.
+5. `import.js --live` — images are resized to fit 400×400 WebP (QR files are
+   uploaded byte-identical), zero-price products are imported inactive, opening
+   stock arrives as `stock_events(reason='import')`, and the store row carries no
+   invented TIN/PTU/address.
+6. `verify.js` — computed counts (inactive = `isactive=false OR baseprice=0`),
+   the anon probe with a throwaway user, `security_invoker` on `order_status`,
+   the `pos-assets` bucket private, 5 random images ≤400px, and
+   `sum(stock_events) = products.stock_quantity` for every product.
+
+**Local pre-flight (agent-safe, no live DB):** `node --test scripts/` runs the
+PGlite suite — migrations 001→004 applied twice, RLS, append-only enforcement,
+server LWW, the reset prechecks and `register_device`.
+
+**Sync notes that the runbook depends on:** pull cursors are per table
+(`pull_cursor:<table>`), keyset-paged on `server_updated_at` (mutable) and
+`server_created_at` (append-only); a device clock 10 minutes ahead or behind
+loses nothing. Offline is never a failure: a sale stays pending indefinitely,
+and only a real 4xx/5xx burns an attempt (8 attempts, 1s→60s backoff).

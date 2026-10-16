@@ -125,3 +125,19 @@ create policy pos_assets_owner_rw on storage.objects
     bucket_id = 'pos-assets'
     and exists (select 1 from stores s where s.owner_id = auth.uid())
   );
+
+-- ------------------------------------------- anon has no grants (A1)
+-- RLS is the gate, but Supabase grants new objects to `anon` by default, and
+-- a VIEW runs with its owner's rights unless it is security_invoker. Revoke the
+-- grants too: a missing grant cannot be bypassed by a policy mistake.
+revoke all on all tables in schema public from anon;
+revoke all on all sequences in schema public from anon;
+revoke all on all functions in schema public from anon;
+
+-- …and keep future objects from re-acquiring them.
+alter default privileges for role postgres in schema public
+  revoke all on tables from anon;
+alter default privileges for role postgres in schema public
+  revoke all on sequences from anon;
+alter default privileges for role postgres in schema public
+  revoke all on functions from anon;

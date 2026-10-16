@@ -100,6 +100,19 @@ function dbUrlProblem(v) {
   return null;
 }
 
+/** Decode a JWT payload's `role` — no signature verification, never printed. */
+function jwtRole(key) {
+  if (!key || !key.startsWith('eyJ')) return null;
+  const parts = String(key).split('.');
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return typeof payload.role === 'string' ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Validate all six keys. Returns [[key, message], ...]; empty = OK. */
 function validate(env) {
   const problems = [];
@@ -117,6 +130,25 @@ function validate(env) {
   for (const k of ['SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']) {
     const v = env[k];
     if (v && /\s/.test(v)) problems.push([k, 'must not contain whitespace']);
+  }
+  // Key-role checks: a JWT must carry the right role; new-style keys must not
+  // be the wrong kind. Messages name the key + reason only.
+  const anon = env.SUPABASE_ANON_KEY || '';
+  const svc = env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (anon.startsWith('eyJ') && jwtRole(anon) !== 'anon') {
+    problems.push(['SUPABASE_ANON_KEY', 'JWT payload role must be "anon"']);
+  }
+  if (anon.startsWith('sb_secret_')) {
+    problems.push(['SUPABASE_ANON_KEY', 'must not be a secret key (sb_secret_…)']);
+  }
+  if (svc.startsWith('eyJ') && jwtRole(svc) !== 'service_role') {
+    problems.push(['SUPABASE_SERVICE_ROLE_KEY', 'JWT payload role must be "service_role"']);
+  }
+  if (svc.startsWith('sb_publishable_')) {
+    problems.push([
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'must not be a publishable key (sb_publishable_…)',
+    ]);
   }
   if (
     env.SUPABASE_ANON_KEY &&
@@ -226,6 +258,7 @@ module.exports = {
   load,
   validate,
   dbUrlProblem,
+  jwtRole,
   requireKeys,
   requireValid,
   dartDefines,

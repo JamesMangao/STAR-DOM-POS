@@ -5,15 +5,19 @@
   "description": "STAR:DOM POS migration scripts: export, db-facts, reset, import, verify.",
   "type": "commonjs",
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "pg": "^8.23.1",
-    "@supabase/supabase-js": "^2.45.0"
+    "sharp": "^0.33.5"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test \"scripts/*.test.js\"",
     "export": "node export.js",
     "facts": "node db-facts.js",
     "reset": "node reset.js",
     "import": "node import.js",
     "verify": "node verify.js"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17"
   }
 }

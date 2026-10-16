@@ -4,8 +4,31 @@
 -- Conventions (plan.md §3): uuid PKs, store_id, device_id where applicable,
 -- created_at/updated_at timestamptz, deleted_at soft delete, synced_at.
 -- Money is numeric(10,2). All timestamps are timestamptz (UTC on the wire).
+--
+-- LAST WRITE WINS (A3): `updated_at` is the CLIENT clock and is only ever
+-- compared. The server keeps its OWN `server_updated_at`, written by
+-- lww_guard() on every insert/update, and that is what pull cursors use.
+-- A client update that is older than the stored row is discarded server-side
+-- (`return null`), so a slow device can never overwrite newer data.
 
-create extension if not exists pgcrypto;
+-- ------------------------------------------------- website-schema guard (A2)
+-- `create table if not exists` would silently KEEP a website table of the same
+-- name (products/categories/orders/payments are shared names). Refuse instead.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'products'
+       and column_name = 'baseprice'
+  ) then
+    raise exception
+      'website schema still present (public.products.baseprice exists): run reset first';
+  end if;
+end $$;
+
+-- No pgcrypto: gen_random_uuid() is core since PG13, so the extension was an
+-- unnecessary dependency (and the reason this file could not run on a plain
+-- local Postgres).
 
 -- ---------------------------------------------------------------- stores
 create table if not exists stores (
@@ -99,27 +122,59 @@ create table if not exists settings (
   primary key (store_id, key)
 );
 
--- ------------------------------------------------ updated_at maintenance
-create or replace function set_updated_at() returns trigger as $$
+-- ------------------------------------------------- last-write-wins (A3)
+-- The old set_updated_at() overwrote the client clock with now(), which made
+-- every push look newest and made stale writes invisible. Gone.
+drop trigger if exists trg_stores_updated_at on stores;
+drop trigger if exists trg_devices_updated_at on devices;
+drop trigger if exists trg_categories_updated_at on categories;
+drop trigger if exists trg_products_updated_at on products;
+drop trigger if exists trg_payment_methods_updated_at on payment_methods;
+drop function if exists set_updated_at();
+
+-- Stale-write guard + server clock. `return null` skips the row entirely.
+create or replace function lww_guard() returns trigger
+language plpgsql
+set search_path = ''
+as $$
 begin
-  new.updated_at := now();
+  if tg_op = 'UPDATE' and new.updated_at < old.updated_at then
+    return null;                       -- stale write ignored
+  end if;
+  new.server_updated_at := now();      -- the only clock a cursor may use
   return new;
-end;
-$$ language plpgsql;
+end $$;
 
 do $$
 declare
   t text;
 begin
   foreach t in array array[
-    'stores', 'devices', 'categories', 'products', 'payment_methods'
+    'stores', 'devices', 'categories', 'products', 'payment_methods', 'settings'
   ] loop
     execute format(
-      'drop trigger if exists trg_%1$s_updated_at on %1$s', t
+      'alter table %1$I add column if not exists server_updated_at '
+      'timestamptz not null default now()', t
     );
+    execute format('drop trigger if exists trg_%1$s_lww on %1$I', t);
     execute format(
-      'create trigger trg_%1$s_updated_at before update on %1$s '
-      'for each row execute function set_updated_at()', t
+      'create trigger trg_%1$s_lww before insert or update on %1$I '
+      'for each row execute function lww_guard()', t
     );
   end loop;
 end $$;
+
+-- Pull-cursor indexes. settings has no id (plan.md §3.13 composite PK), so its
+-- cursor index carries the whole key.
+create index if not exists idx_stores_server_updated
+  on stores (server_updated_at, id);
+create index if not exists idx_devices_server_updated
+  on devices (server_updated_at, id);
+create index if not exists idx_categories_server_updated
+  on categories (server_updated_at, id);
+create index if not exists idx_products_server_updated
+  on products (server_updated_at, id);
+create index if not exists idx_payment_methods_server_updated
+  on payment_methods (server_updated_at, id);
+create index if not exists idx_settings_server_updated
+  on settings (server_updated_at, store_id, key);

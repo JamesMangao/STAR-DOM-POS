@@ -2,59 +2,126 @@ import 'package:uuid/uuid.dart';
 
 /// Pure, host-testable business logic. No Flutter/DB imports.
 
+/// MONEY. The stored value stays a peso [double] (it round-trips to the
+/// server's numeric(10,2) and every screen, export and import speaks pesos),
+/// but no comparison, sum or difference is ever done in floating point: each
+/// one converts to integer CENTAVOS first, which is what makes 0.1 + 0.2 equal
+/// 0.3 and a 3 x 19.99 line total exactly 59.97.
+class Money {
+  Money._();
+
+  /// Pesos -> integer centavos. The single rounding point in the app.
+  static int cents(double pesos) => (pesos * 100).round();
+
+  /// Integer centavos -> pesos.
+  static double pesos(int cents) => cents / 100;
+
+  /// Round a peso value to 2 decimals (compat wrapper for AppDatabase.r2).
+  static double round(double value) => pesos(cents(value));
+
+  /// Cent-exact equality — never `a == b` on money.
+  static bool equal(double a, double b) => cents(a) == cents(b);
+
+  static int compare(double a, double b) => cents(a).compareTo(cents(b));
+
+  /// Cent-exact sum of any number of peso values.
+  static double sum(Iterable<double> pesosValues) =>
+      pesos(pesosValues.fold<int>(0, (acc, v) => acc + cents(v)));
+
+  static double subtract(double a, double b) => pesos(cents(a) - cents(b));
+
+  /// unit price x quantity, in cents (a line total can never drift).
+  static double multiply(double unitPrice, int quantity) =>
+      pesos(cents(unitPrice) * quantity);
+}
+
 /// Cashier math: change = received - due; sale completes only when received >= due.
 class ChangeCalc {
   ChangeCalc._();
 
   static double compute({required double due, required double received}) =>
-      (received * 100 - due * 100) / 100;
+      Money.subtract(received, due);
 
   static bool canComplete({required double due, required double received}) =>
-      received >= due - 0.001;
+      Money.cents(received) >= Money.cents(due);
 }
 
 /// order_no = {device_code}-{YYMMDD}-{seq}, unique per store.
 class OrderNo {
   OrderNo._();
 
-  static String generate(String deviceCode, DateTime now, int seq) {
-    final utc = now.toUtc();
+  static String generate(
+    String deviceCode,
+    DateTime now,
+    int seq, {
+    int tzOffsetMinutes = BusinessDate.defaultTzOffsetMinutes,
+  }) {
+    final local = BusinessDate.local(now, tzOffsetMinutes: tzOffsetMinutes);
     final ymd =
-        '${utc.year % 100}'.padLeft(2, '0') +
-        '${utc.month}'.padLeft(2, '0') +
-        '${utc.day}'.padLeft(2, '0');
+        '${local.year % 100}'.padLeft(2, '0') +
+        '${local.month}'.padLeft(2, '0') +
+        '${local.day}'.padLeft(2, '0');
     return '$deviceCode-$ymd-${seq.toString().padLeft(3, '0')}';
   }
 
-  /// YYMMDD day key for per-device daily sequences (UTC day).
-  static String dayKey(DateTime now) {
-    final utc = now.toUtc();
-    return '${utc.year % 100}'.padLeft(2, '0') +
-        '${utc.month}'.padLeft(2, '0') +
-        '${utc.day}'.padLeft(2, '0');
+  /// YYMMDD day key for per-device daily sequences (STORE-LOCAL day).
+  static String dayKey(
+    DateTime now, {
+    int tzOffsetMinutes = BusinessDate.defaultTzOffsetMinutes,
+  }) {
+    final local = BusinessDate.local(now, tzOffsetMinutes: tzOffsetMinutes);
+    return '${local.year % 100}'.padLeft(2, '0') +
+        '${local.month}'.padLeft(2, '0') +
+        '${local.day}'.padLeft(2, '0');
   }
 }
 
-/// Business date is always the UTC calendar day. One helper so reports,
-/// End-of-Day and Close Day never disagree about which day a sale belongs to.
+/// Business date is the STORE-LOCAL calendar day (UTC+8 in Manila, no DST).
+/// Using the UTC day put every sale before 08:00 Manila on the previous date.
+/// One helper so reports, End-of-Day and Close Day never disagree.
 class BusinessDate {
   BusinessDate._();
 
-  /// UTC midnight for [at] — the canonical stored value.
-  static DateTime startOfDayUtc(DateTime at) {
-    final utc = at.toUtc();
-    return DateTime.utc(utc.year, utc.month, utc.day);
+  /// Asia/Manila is UTC+8 all year — the default when no setting exists.
+  static const int defaultTzOffsetMinutes = 480;
+
+  /// The store-local wall clock for an instant.
+  static DateTime local(
+    DateTime at, {
+    int tzOffsetMinutes = defaultTzOffsetMinutes,
+  }) => at.toUtc().add(Duration(minutes: tzOffsetMinutes));
+
+  /// Local midnight, expressed as the canonical UTC instant to store.
+  static DateTime startOfDayUtc(
+    DateTime at, {
+    int tzOffsetMinutes = defaultTzOffsetMinutes,
+  }) {
+    final l = local(at, tzOffsetMinutes: tzOffsetMinutes);
+    return DateTime.utc(
+      l.year,
+      l.month,
+      l.day,
+    ).subtract(Duration(minutes: tzOffsetMinutes));
   }
 
-  /// YYYY-MM-DD key (UTC).
-  static String key(DateTime at) {
-    final utc = at.toUtc();
-    return '${utc.year.toString().padLeft(4, '0')}-'
-        '${utc.month.toString().padLeft(2, '0')}-'
-        '${utc.day.toString().padLeft(2, '0')}';
+  /// YYYY-MM-DD key of the store-local day.
+  static String key(
+    DateTime at, {
+    int tzOffsetMinutes = defaultTzOffsetMinutes,
+  }) {
+    final l = local(at, tzOffsetMinutes: tzOffsetMinutes);
+    return '${l.year.toString().padLeft(4, '0')}-'
+        '${l.month.toString().padLeft(2, '0')}-'
+        '${l.day.toString().padLeft(2, '0')}';
   }
 
-  static bool sameDay(DateTime a, DateTime b) => key(a) == key(b);
+  static bool sameDay(
+    DateTime a,
+    DateTime b, {
+    int tzOffsetMinutes = defaultTzOffsetMinutes,
+  }) =>
+      key(a, tzOffsetMinutes: tzOffsetMinutes) ==
+      key(b, tzOffsetMinutes: tzOffsetMinutes);
 }
 
 /// Deterministic outbox event id — dedupe key for idempotent push.
@@ -76,6 +143,7 @@ class LastWriteWins {
   LastWriteWins._();
 
   /// Returns true when the server version should overwrite the local one.
+  /// Applied to EVERY mutable table (products used to be the only one).
   static bool serverWins({
     required DateTime? localUpdatedAt,
     required DateTime? serverUpdatedAt,

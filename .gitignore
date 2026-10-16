@@ -47,8 +47,10 @@ app.*.map.json
 # Environment variables (never checked in)
 .env
 
-# Supabase export data
+# Supabase export data (customer data + QR images — never commit)
 supabase/export/
+supabase/export-new/
+supabase/export-old-psql/
 
 # Phase audit reports
 Phase1_Audit_Report.txt
@@ -62,3 +64,6 @@ Phase1_Audit_Report.txt
 # Node deps for the supabase/scripts suite
 scripts/node_modules/
 node_modules/
+
+# Review bundles (assembled locally for a reviewer, regenerable)
+docs/review-bundle*.txt

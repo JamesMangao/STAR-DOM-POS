@@ -1,43 +1,32 @@
 // scripts/import.js — Step C: transform the export into the POS schema.
 //
-// REVIEW ONLY — not executed in this run. Deps: pg, @supabase/supabase-js.
-//   node scripts/import.js
+//   node scripts/import.js            (refuses if it already completed)
+//   node scripts/import.js --force    (same, but allowed to run again)
 //
-// Images are uploaded as-is (the source files are already .webp); no resizing
-// step is performed.
+// Images: product images are RESIZED to fit inside 400x400 (never enlarged,
+// webp quality 80). QR images are uploaded byte-identical — they are the
+// payment QRs people scan, so they are never re-encoded.
 //
 // IDEMPOTENT + RESUMABLE by construction:
 //   * every row's uuid is uuid v5 of a fixed namespace + "table:source_id",
-//     so a rerun produces the same PK and hits ON CONFLICT instead of
-//     duplicating. A crash mid-run is fixed by simply running it again.
+//     so a rerun produces the same PK and hits ON CONFLICT DO NOTHING.
 //   * storage uploads use upsert:true and are skipped when the object already
 //     exists with the same size.
 //   * the owner auth user is created only if absent.
+//   * after a successful run, settings.key = 'import_completed_at' is written.
+//     A rerun refuses to start unless --force, and --force is still DO NOTHING,
+//     so it can never overwrite prices the owner has since edited.
 'use strict';
 
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { writeClient } = require('./pg');
 const env = require('./env');
 const manifest = require('./manifest');
+const lib = require('./import-lib');
 
 const ASSETS_ROOT = 'D:\\STARDOM\\STAR-DOM-Web';
-const NS = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'; // namespace URL
 
-// ---- deterministic uuid v5 -------------------------------------------------
-function uuidV5(name) {
-  const nsBytes = Buffer.from(NS.replace(/-/g, ''), 'hex');
-  const h = crypto.createHash('sha1').update(nsBytes).update(name, 'utf8').digest();
-  const b = Buffer.from(h.subarray(0, 16));
-  b[6] = (b[6] & 0x0f) | 0x50;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const hex = b.toString('hex');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-const idOf = (table, srcId) => uuidV5(`${table}:${srcId}`);
-
-// ---- helpers ---------------------------------------------------------------
 const readJson = (n) =>
   JSON.parse(fs.readFileSync(path.join(manifest.EXPORT_DIR, `${n}.json`), 'utf8'));
 
@@ -60,7 +49,7 @@ async function applyMigrations(client) {
 
 // ---- 1. owner auth user + store -------------------------------------------
 async function ensureOwnerAndStore(supabaseAdmin, client, e) {
-  const storeId = uuidV5('store:main');
+  const storeId = lib.uuidV5('store:main');
   let ownerId;
 
   const list = await supabaseAdmin.auth.admin.listUsers();
@@ -79,22 +68,17 @@ async function ensureOwnerAndStore(supabaseAdmin, client, e) {
     console.log('owner auth user: created', ownerId);
   }
 
+  const s = lib.storeRow(storeId, ownerId);
+  // The only column a rerun may touch is owner_id: an owner who renamed the
+  // store or edited receipt details must never have that overwritten.
   await client.query(
     `insert into stores (id, name, tagline, owner_id, receipt_name, receipt_tin,
         receipt_address, receipt_accreditation, receipt_footer, currency)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PHP')
-     on conflict (id) do update set owner_id = excluded.owner_id,
-       name = excluded.name, tagline = excluded.tagline`,
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     on conflict (id) do update set owner_id = excluded.owner_id`,
     [
-      storeId,
-      'STAR:DOM Artisan & Pop-up Hub',
-      'Fast. Simple. Offline. Built for Filipino Small Businesses.',
-      ownerId,
-      'STAR:DOM Artisan Marketplace & Pop-up Tour',
-      '000-000-000-000',
-      'Unit 12, South Luzon Atelier, Santa Rosa, Laguna',
-      'PTU-2026-00015',
-      'Salamat sa pagtangkilik!',
+      s.id, s.name, s.tagline, s.ownerId, s.receiptName, s.receiptTin,
+      s.receiptAddress, s.receiptAccreditation, s.receiptFooter, s.currency,
     ],
   );
   console.log('store bound: stores.owner_id = auth.users.id =', ownerId);
@@ -102,111 +86,157 @@ async function ensureOwnerAndStore(supabaseAdmin, client, e) {
 }
 
 // ---- 2. categories + products + images ------------------------------------
+async function uploadIfChanged(supabase, objectPath, buf, contentType) {
+  const folder = path.posix.dirname(objectPath);
+  const base = path.posix.basename(objectPath);
+  const existing = await supabase.storage
+    .from('pos-assets')
+    .list(folder === '.' ? '' : folder, { search: base, limit: 100 });
+  if (existing.error) {
+    throw new Error(`list ${folder}: ${existing.error.message}`);
+  }
+  const found = (existing.data || []).find((o) => o.name === base);
+  if (found && Number(found.metadata?.size) === buf.length) return false; // resumable skip
+  const up = await supabase.storage
+    .from('pos-assets')
+    .upload(objectPath, buf, { contentType, upsert: true });
+  if (up.error) throw new Error(`upload ${objectPath}: ${up.error.message}`);
+  return true;
+}
+
 async function importCatalogue(supabase, client, storeId) {
   const cats = readJson('categories');
   const catId = new Map();
   for (const c of cats) {
-    const id = idOf('categories', c.id);
+    const id = lib.idOf('categories', c.id);
     catId.set(c.id, id);
     await client.query(
       `insert into categories (id, store_id, name, sort_order, is_active)
        values ($1,$2,$3,$4,$5)
-       on conflict (id) do update set name=excluded.name,
-         sort_order=excluded.sort_order, is_active=excluded.is_active`,
+       on conflict (id) do nothing`,
       [id, storeId, c.name.trim(), c.displayorder ?? 0, !!c.isactive],
     );
   }
-  console.log('categories upserted:', cats.length);
+  console.log('categories inserted:', cats.length);
 
   const images = readJson('productimages');
-  const primary = new Map();
-  for (const i of images) if (i.isprimary && !primary.has(i.productid)) primary.set(i.productid, i.imagefile);
+  const rawProducts = readJson('products');
+  const { rows: products, duplicates } = lib.resolveBarcodes(rawProducts);
 
-  const products = readJson('products');
-  let uploaded = 0, missingImg = 0;
+  let uploaded = 0, skipped = 0, missingImg = 0, hidden = 0, stockEvents = 0;
+  let maxSide = 0;
+
   for (const p of products) {
-    const id = idOf('products', p.id);
-    const categoryId = p.categoryid ? catId.get(p.categoryid) ?? null : null;
+    const id = lib.idOf('products', p.id);
+    const categoryId =
+      p.categoryid && catId.has(p.categoryid) ? catId.get(p.categoryid) : null;
+
+    // image: primary, else lowest sortorder
     let imagePath = null;
-    const rel = primary.get(p.id);
+    const rel = lib.pickImagePath(images, p.id);
     if (rel) {
-      const disk = path.join(ASSETS_ROOT, rel.replace(/^[\\/]+/, ''));
+      const disk = path.join(ASSETS_ROOT, String(rel).replace(/^[\\/]+/, ''));
       if (fs.existsSync(disk)) {
+        const resized = await lib.resizeProductImage(fs.readFileSync(disk));
+        maxSide = Math.max(maxSide, resized.width, resized.height);
         const objectPath = `products/${id}.webp`;
-        await uploadIfChanged(supabase, disk, objectPath);
+        if (await uploadIfChanged(supabase, objectPath, resized.buffer, 'image/webp')) {
+          uploaded++;
+        } else {
+          skipped++;
+        }
         imagePath = objectPath;
-        uploaded++;
       } else {
         missingImg++;
       }
     }
+
+    const isActive = lib.isActiveFor(p.baseprice, p.isactive);
+    if (!isActive) hidden++;
+
     await client.query(
       `insert into products (id, store_id, category_id, name, price, barcode,
           image_path, stock_quantity, is_active)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       on conflict (id) do update set category_id=excluded.category_id,
-         name=excluded.name, price=excluded.price, barcode=excluded.barcode,
-         image_path=excluded.image_path, is_active=excluded.is_active`,
-      [id, storeId, categoryId, p.name.trim(), Number(p.baseprice ?? 0),
-       p.sku || null, imagePath, Number(p.stockquantity ?? 0), !!p.isactive],
+       on conflict (id) do nothing`,
+      // Money stays the exact decimal STRING the export produced ("30.00").
+      [id, storeId, categoryId, p.name.trim(), p.baseprice ?? '0',
+       p.barcode ?? null, imagePath, Number(p.stockquantity ?? 0), isActive],
     );
+
+    // OPENING STOCK: without this, stockOf() is 0 and the first sale drives
+    // the product to -qty. delta = the website's stock, as an 'import' event.
+    const qty = Number(p.stockquantity ?? 0);
+    if (qty !== 0) {
+      const ev = lib.stockImportEvent(p, id, storeId);
+      const r = await client.query(
+        `insert into stock_events (id, store_id, product_id, delta, reason, order_id, device_id)
+         values ($1,$2,$3,$4,$5,null,null)
+         on conflict (id) do nothing`,
+        [ev.id, ev.storeId, ev.productId, ev.delta, ev.reason],
+      );
+      stockEvents += r.rowCount;
+    }
   }
-  console.log(`products upserted: ${products.length}, images uploaded: ${uploaded}, missing on disk: ${missingImg}`);
+
+  console.log(
+    `products inserted: ${products.length} (hidden: ${hidden}), ` +
+      `images uploaded: ${uploaded}, already current: ${skipped}, missing on disk: ${missingImg}`,
+  );
+  console.log(`image max side after resize: ${maxSide}px (cap ${lib.MAX_IMAGE_SIDE}px)`);
+  console.log(`opening stock_events inserted: ${stockEvents}`);
+  if (duplicates.length) {
+    console.log(`duplicate SKUs resolved (barcode kept on the first, nulled after):`);
+    for (const d of duplicates) {
+      console.log(`  sku ${d.sku}: kept on product ${d.keptOn}, dropped from ${d.droppedFrom} (${d.name})`);
+    }
+  } else {
+    console.log('duplicate SKUs: none');
+  }
 }
 
-async function uploadIfChanged(supabase, disk, objectPath) {
-  const buf = fs.readFileSync(disk);
-  const existing = await supabase.storage.from('pos-assets').list('products', {
-    search: path.basename(objectPath),
-  });
-  const found = existing.data?.find((o) => o.name === path.basename(objectPath));
-  if (found && found.metadata?.size === buf.length) return; // resumable skip
-  const up = await supabase.storage
-    .from('pos-assets')
-    .upload(objectPath, buf, { contentType: 'image/webp', upsert: true });
-  if (up.error) throw new Error(`upload ${objectPath}: ${up.error.message}`);
-}
-
-// ---- 3. seed: payment methods --------------------------------------------
-// seedOutline:
-//   store (above) -> payment_methods: Cash (cash), GCash (ewallet, QR
-//   qr_gcash.png, require_reference), GoTyme (ewallet, QR qr_gotyme.png,
-//   require_reference); QR files are uploaded to pos-assets/payment/.
+// ---- 3. payment methods ---------------------------------------------------
 async function seed(supabase, client, storeId) {
-  const rows = [
-    [idOf('pm', 'cash'), 'Cash', 'cash', '#15803D', null, '', '', false, 0],
-    [idOf('pm', 'gcash'), 'GCash', 'ewallet', '#0070E0', 'payment/gcash.png',
-      'RIAN DOMINIC CABREROS', '0970 137 5033', true, 1],
-    [idOf('pm', 'gotyme'), 'GoTyme', 'ewallet', '#00A3A1', 'payment/gotyme.png',
-      'RIAN DOMINIC CABREROS', '', true, 2],
-  ];
-  for (const [id, name, type, color, qr, acct, num, reqRef, sort] of rows) {
-    if (qr) {
-      const file = path.join(manifest.EXPORT_DIR, qr.split('/').pop());
+  const settings = readJson('paymentsettings');
+  const rows = lib.paymentMethodsFromExport(settings, manifest.EXPORT_DIR);
+
+  for (const m of rows) {
+    if (m.qrFile && m.qrObject) {
+      const file = path.join(manifest.EXPORT_DIR, m.qrFile);
       const buf = fs.readFileSync(file);
-      await supabase.storage.from('pos-assets').upload(qr, buf, {
-        contentType: 'image/png', upsert: true,
+      // QR: uploaded EXACTLY as exported. Byte-identical or it fails.
+      const up = await supabase.storage.from('pos-assets').upload(m.qrObject, buf, {
+        contentType: 'image/png',
+        upsert: true,
       });
+      if (up.error) throw new Error(`upload ${m.qrObject}: ${up.error.message}`);
+      const back = await supabase.storage.from('pos-assets').download(m.qrObject);
+      if (back.error) throw new Error(`verify ${m.qrObject}: ${back.error.message}`);
+      const got = Buffer.from(await back.data.arrayBuffer());
+      if (got.length !== buf.length || !got.equals(buf)) {
+        throw new Error(`QR ${m.qrObject} is not byte-identical after upload`);
+      }
+      console.log(`QR ${m.qrFile} -> ${m.qrObject}: ${buf.length} bytes, byte-identical`);
     }
     await client.query(
       `insert into payment_methods (id, store_id, name, type, color,
           qr_image_path, account_name, account_number, require_reference,
           is_enabled, sort_order)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10)
-       on conflict (id) do update set name=excluded.name, type=excluded.type,
-         color=excluded.color, qr_image_path=excluded.qr_image_path,
-         account_name=excluded.account_name,
-         account_number=excluded.account_number,
-         require_reference=excluded.require_reference,
-         sort_order=excluded.sort_order`,
-      [id, storeId, name, type, color, qr, acct, num, reqRef, sort],
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       on conflict (id) do nothing`,
+      [
+        m.id, storeId, m.name, m.type, m.color, m.qrObject, m.accountName,
+        m.accountNumber, m.requireReference, m.isEnabled, m.sortOrder,
+      ],
     );
   }
-  console.log('payment_methods upserted:', rows.length);
+  console.log('payment_methods inserted:', rows.length, '(' +
+    rows.map((r) => r.name).join(', ') + ')');
 }
 
 // ---- main ------------------------------------------------------------------
 async function main() {
+  const force = process.argv.includes('--force');
   const e = env.requireKeys();
   const v = manifest.verify();
   if (!v.ok) {
@@ -216,16 +246,40 @@ async function main() {
   }
   const { createClient } = require('@supabase/supabase-js');
   const supabase = createClient(e.SUPABASE_URL, e.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 
   const { client, close } = await writeClient();
   try {
     await applyMigrations(client);
-    const { storeId } = await ensureOwnerAndStore(supabase, client, e);
+
+    const storeId = lib.uuidV5('store:main');
+    const done = await client.query(
+      `select value from settings where store_id = $1 and key = 'import_completed_at'`,
+      [storeId],
+    );
+    if (done.rowCount > 0 && !force) {
+      console.log(
+        `refusing: this import already completed at ${done.rows[0].value}.\n` +
+          'Rerun with --force if you really mean it (it is still ON CONFLICT DO NOTHING).',
+      );
+      process.exit(1);
+    }
+    if (done.rowCount > 0) {
+      console.log(`--force: previous run completed at ${done.rows[0].value}; inserts stay DO NOTHING.`);
+    }
+
+    const { ownerId } = await ensureOwnerAndStore(supabase, client, e);
     await importCatalogue(supabase, client, storeId);
     await seed(supabase, client, storeId);
-    console.log('import complete. Run scripts/verify.js next.');
+
+    await client.query(
+      `insert into settings (store_id, key, value) values ($1, 'import_completed_at', $2)
+       on conflict (store_id, key) do update set value = excluded.value,
+         updated_at = now()`,
+      [storeId, new Date().toISOString()],
+    );
+    console.log('import complete (owner', ownerId + '). Run scripts/verify.js next.');
   } finally {
     await close();
   }

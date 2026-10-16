@@ -7221,6 +7221,18 @@ class $SyncOutboxTable extends SyncOutbox
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _lastErrorMeta = const VerificationMeta(
     'lastError',
   );
@@ -7265,6 +7277,7 @@ class $SyncOutboxTable extends SyncOutbox
     op,
     payload,
     attempts,
+    nextAttemptAt,
     lastError,
     createdAt,
     syncedAt,
@@ -7337,6 +7350,15 @@ class $SyncOutboxTable extends SyncOutbox
         attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
       );
     }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_error')) {
       context.handle(
         _lastErrorMeta,
@@ -7396,6 +7418,10 @@ class $SyncOutboxTable extends SyncOutbox
         DriftSqlType.int,
         data['${effectivePrefix}attempts'],
       )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      ),
       lastError: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}last_error'],
@@ -7426,6 +7452,10 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
   final String op;
   final String payload;
   final int attempts;
+
+  /// When this row may be retried (B5). Null = now. Backoff 1s..60s, so a
+  /// flapping connection never burns the 8 attempts in a few seconds.
+  final DateTime? nextAttemptAt;
   final String? lastError;
   final DateTime createdAt;
   final DateTime? syncedAt;
@@ -7438,6 +7468,7 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
     required this.op,
     required this.payload,
     required this.attempts,
+    this.nextAttemptAt,
     this.lastError,
     required this.createdAt,
     this.syncedAt,
@@ -7453,6 +7484,9 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
     map['op'] = Variable<String>(op);
     map['payload'] = Variable<String>(payload);
     map['attempts'] = Variable<int>(attempts);
+    if (!nullToAbsent || nextAttemptAt != null) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    }
     if (!nullToAbsent || lastError != null) {
       map['last_error'] = Variable<String>(lastError);
     }
@@ -7473,6 +7507,9 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
       op: Value(op),
       payload: Value(payload),
       attempts: Value(attempts),
+      nextAttemptAt: nextAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextAttemptAt),
       lastError: lastError == null && nullToAbsent
           ? const Value.absent()
           : Value(lastError),
@@ -7497,6 +7534,7 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
       op: serializer.fromJson<String>(json['op']),
       payload: serializer.fromJson<String>(json['payload']),
       attempts: serializer.fromJson<int>(json['attempts']),
+      nextAttemptAt: serializer.fromJson<DateTime?>(json['nextAttemptAt']),
       lastError: serializer.fromJson<String?>(json['lastError']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
@@ -7514,6 +7552,7 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
       'op': serializer.toJson<String>(op),
       'payload': serializer.toJson<String>(payload),
       'attempts': serializer.toJson<int>(attempts),
+      'nextAttemptAt': serializer.toJson<DateTime?>(nextAttemptAt),
       'lastError': serializer.toJson<String?>(lastError),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
@@ -7529,6 +7568,7 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
     String? op,
     String? payload,
     int? attempts,
+    Value<DateTime?> nextAttemptAt = const Value.absent(),
     Value<String?> lastError = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> syncedAt = const Value.absent(),
@@ -7541,6 +7581,9 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
     op: op ?? this.op,
     payload: payload ?? this.payload,
     attempts: attempts ?? this.attempts,
+    nextAttemptAt: nextAttemptAt.present
+        ? nextAttemptAt.value
+        : this.nextAttemptAt,
     lastError: lastError.present ? lastError.value : this.lastError,
     createdAt: createdAt ?? this.createdAt,
     syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
@@ -7555,6 +7598,9 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
       op: data.op.present ? data.op.value : this.op,
       payload: data.payload.present ? data.payload.value : this.payload,
       attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
@@ -7572,6 +7618,7 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
           ..write('op: $op, ')
           ..write('payload: $payload, ')
           ..write('attempts: $attempts, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('lastError: $lastError, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
@@ -7589,6 +7636,7 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
     op,
     payload,
     attempts,
+    nextAttemptAt,
     lastError,
     createdAt,
     syncedAt,
@@ -7605,6 +7653,7 @@ class SyncOutboxData extends DataClass implements Insertable<SyncOutboxData> {
           other.op == this.op &&
           other.payload == this.payload &&
           other.attempts == this.attempts &&
+          other.nextAttemptAt == this.nextAttemptAt &&
           other.lastError == this.lastError &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt);
@@ -7619,6 +7668,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
   final Value<String> op;
   final Value<String> payload;
   final Value<int> attempts;
+  final Value<DateTime?> nextAttemptAt;
   final Value<String?> lastError;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
@@ -7632,6 +7682,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
     this.op = const Value.absent(),
     this.payload = const Value.absent(),
     this.attempts = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
     this.lastError = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
@@ -7646,6 +7697,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
     required String op,
     required String payload,
     this.attempts = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
     this.lastError = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
@@ -7666,6 +7718,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
     Expression<String>? op,
     Expression<String>? payload,
     Expression<int>? attempts,
+    Expression<DateTime>? nextAttemptAt,
     Expression<String>? lastError,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
@@ -7680,6 +7733,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
       if (op != null) 'op': op,
       if (payload != null) 'payload': payload,
       if (attempts != null) 'attempts': attempts,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
       if (lastError != null) 'last_error': lastError,
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
@@ -7696,6 +7750,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
     Value<String>? op,
     Value<String>? payload,
     Value<int>? attempts,
+    Value<DateTime?>? nextAttemptAt,
     Value<String?>? lastError,
     Value<DateTime>? createdAt,
     Value<DateTime?>? syncedAt,
@@ -7710,6 +7765,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
       op: op ?? this.op,
       payload: payload ?? this.payload,
       attempts: attempts ?? this.attempts,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
       lastError: lastError ?? this.lastError,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
@@ -7744,6 +7800,9 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
     if (attempts.present) {
       map['attempts'] = Variable<int>(attempts.value);
     }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
@@ -7770,6 +7829,7 @@ class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxData> {
           ..write('op: $op, ')
           ..write('payload: $payload, ')
           ..write('attempts: $attempts, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
           ..write('lastError: $lastError, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
@@ -8177,38 +8237,36 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   ];
 }
 
-typedef $$StoresTableCreateCompanionBuilder =
-    StoresCompanion Function({
-      required String id,
-      required String name,
-      required String tagline,
-      required String ownerId,
-      required String receiptName,
-      required String receiptTin,
-      required String receiptAddress,
-      required String receiptAccreditation,
-      required String receiptFooter,
-      required String currency,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
-typedef $$StoresTableUpdateCompanionBuilder =
-    StoresCompanion Function({
-      Value<String> id,
-      Value<String> name,
-      Value<String> tagline,
-      Value<String> ownerId,
-      Value<String> receiptName,
-      Value<String> receiptTin,
-      Value<String> receiptAddress,
-      Value<String> receiptAccreditation,
-      Value<String> receiptFooter,
-      Value<String> currency,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
+typedef $$StoresTableCreateCompanionBuilder = StoresCompanion Function({
+  required String id,
+  required String name,
+  required String tagline,
+  required String ownerId,
+  required String receiptName,
+  required String receiptTin,
+  required String receiptAddress,
+  required String receiptAccreditation,
+  required String receiptFooter,
+  required String currency,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$StoresTableUpdateCompanionBuilder = StoresCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String> tagline,
+  Value<String> ownerId,
+  Value<String> receiptName,
+  Value<String> receiptTin,
+  Value<String> receiptAddress,
+  Value<String> receiptAccreditation,
+  Value<String> receiptFooter,
+  Value<String> currency,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
 
 class $$StoresTableFilterComposer
     extends Composer<_$AppDatabase, $StoresTable> {
@@ -8514,30 +8572,28 @@ typedef $$StoresTableProcessedTableManager =
       Store,
       PrefetchHooks Function()
     >;
-typedef $$DevicesTableCreateCompanionBuilder =
-    DevicesCompanion Function({
-      required String id,
-      required String storeId,
-      required String deviceName,
-      required String deviceCode,
-      Value<bool> isActive,
-      Value<DateTime?> lastSyncAt,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
-typedef $$DevicesTableUpdateCompanionBuilder =
-    DevicesCompanion Function({
-      Value<String> id,
-      Value<String> storeId,
-      Value<String> deviceName,
-      Value<String> deviceCode,
-      Value<bool> isActive,
-      Value<DateTime?> lastSyncAt,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
+typedef $$DevicesTableCreateCompanionBuilder = DevicesCompanion Function({
+  required String id,
+  required String storeId,
+  required String deviceName,
+  required String deviceCode,
+  Value<bool> isActive,
+  Value<DateTime?> lastSyncAt,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$DevicesTableUpdateCompanionBuilder = DevicesCompanion Function({
+  Value<String> id,
+  Value<String> storeId,
+  Value<String> deviceName,
+  Value<String> deviceCode,
+  Value<bool> isActive,
+  Value<DateTime?> lastSyncAt,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
 
 class $$DevicesTableFilterComposer
     extends Composer<_$AppDatabase, $DevicesTable> {
@@ -8771,32 +8827,30 @@ typedef $$DevicesTableProcessedTableManager =
       Device,
       PrefetchHooks Function()
     >;
-typedef $$CategoriesTableCreateCompanionBuilder =
-    CategoriesCompanion Function({
-      required String id,
-      required String storeId,
-      required String name,
-      Value<int> sortOrder,
-      Value<bool> isActive,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
-typedef $$CategoriesTableUpdateCompanionBuilder =
-    CategoriesCompanion Function({
-      Value<String> id,
-      Value<String> storeId,
-      Value<String> name,
-      Value<int> sortOrder,
-      Value<bool> isActive,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
+typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
+  required String id,
+  required String storeId,
+  required String name,
+  Value<int> sortOrder,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
+typedef $$CategoriesTableUpdateCompanionBuilder = CategoriesCompanion Function({
+  Value<String> id,
+  Value<String> storeId,
+  Value<String> name,
+  Value<int> sortOrder,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
 
 class $$CategoriesTableFilterComposer
     extends Composer<_$AppDatabase, $CategoriesTable> {
@@ -9041,40 +9095,38 @@ typedef $$CategoriesTableProcessedTableManager =
       Category,
       PrefetchHooks Function()
     >;
-typedef $$ProductsTableCreateCompanionBuilder =
-    ProductsCompanion Function({
-      required String id,
-      required String storeId,
-      Value<String?> categoryId,
-      required String name,
-      required double price,
-      Value<String?> barcode,
-      Value<String?> imagePath,
-      Value<int> stockQuantity,
-      Value<bool> isActive,
-      Value<DateTime> createdAt,
-      required DateTime updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
-typedef $$ProductsTableUpdateCompanionBuilder =
-    ProductsCompanion Function({
-      Value<String> id,
-      Value<String> storeId,
-      Value<String?> categoryId,
-      Value<String> name,
-      Value<double> price,
-      Value<String?> barcode,
-      Value<String?> imagePath,
-      Value<int> stockQuantity,
-      Value<bool> isActive,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> deletedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
+typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
+  required String id,
+  required String storeId,
+  Value<String?> categoryId,
+  required String name,
+  required double price,
+  Value<String?> barcode,
+  Value<String?> imagePath,
+  Value<int> stockQuantity,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+  required DateTime updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
+typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
+  Value<String> id,
+  Value<String> storeId,
+  Value<String?> categoryId,
+  Value<String> name,
+  Value<double> price,
+  Value<String?> barcode,
+  Value<String?> imagePath,
+  Value<int> stockQuantity,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
 
 class $$ProductsTableFilterComposer
     extends Composer<_$AppDatabase, $ProductsTable> {
@@ -9791,46 +9843,44 @@ typedef $$PaymentMethodsTableProcessedTableManager =
       PaymentMethod,
       PrefetchHooks Function()
     >;
-typedef $$OrdersTableCreateCompanionBuilder =
-    OrdersCompanion Function({
-      required String id,
-      required String storeId,
-      required String deviceId,
-      required String orderNo,
-      Value<double> subtotal,
-      Value<double> discount,
-      required double total,
-      Value<String> note,
-      Value<String?> paymentMethodId,
-      Value<double?> amountReceived,
-      Value<double?> changeAmount,
-      Value<String> referenceNo,
-      Value<String> status,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
-typedef $$OrdersTableUpdateCompanionBuilder =
-    OrdersCompanion Function({
-      Value<String> id,
-      Value<String> storeId,
-      Value<String> deviceId,
-      Value<String> orderNo,
-      Value<double> subtotal,
-      Value<double> discount,
-      Value<double> total,
-      Value<String> note,
-      Value<String?> paymentMethodId,
-      Value<double?> amountReceived,
-      Value<double?> changeAmount,
-      Value<String> referenceNo,
-      Value<String> status,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
+typedef $$OrdersTableCreateCompanionBuilder = OrdersCompanion Function({
+  required String id,
+  required String storeId,
+  required String deviceId,
+  required String orderNo,
+  Value<double> subtotal,
+  Value<double> discount,
+  required double total,
+  Value<String> note,
+  Value<String?> paymentMethodId,
+  Value<double?> amountReceived,
+  Value<double?> changeAmount,
+  Value<String> referenceNo,
+  Value<String> status,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
+typedef $$OrdersTableUpdateCompanionBuilder = OrdersCompanion Function({
+  Value<String> id,
+  Value<String> storeId,
+  Value<String> deviceId,
+  Value<String> orderNo,
+  Value<double> subtotal,
+  Value<double> discount,
+  Value<double> total,
+  Value<String> note,
+  Value<String?> paymentMethodId,
+  Value<double?> amountReceived,
+  Value<double?> changeAmount,
+  Value<String> referenceNo,
+  Value<String> status,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
 
 class $$OrdersTableFilterComposer
     extends Composer<_$AppDatabase, $OrdersTable> {
@@ -10202,30 +10252,28 @@ typedef $$OrdersTableProcessedTableManager =
       Order,
       PrefetchHooks Function()
     >;
-typedef $$OrderItemsTableCreateCompanionBuilder =
-    OrderItemsCompanion Function({
-      required String id,
-      required String orderId,
-      Value<String?> productId,
-      required String productName,
-      required double unitPrice,
-      required int quantity,
-      required double lineTotal,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
-typedef $$OrderItemsTableUpdateCompanionBuilder =
-    OrderItemsCompanion Function({
-      Value<String> id,
-      Value<String> orderId,
-      Value<String?> productId,
-      Value<String> productName,
-      Value<double> unitPrice,
-      Value<int> quantity,
-      Value<double> lineTotal,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
+typedef $$OrderItemsTableCreateCompanionBuilder = OrderItemsCompanion Function({
+  required String id,
+  required String orderId,
+  Value<String?> productId,
+  required String productName,
+  required double unitPrice,
+  required int quantity,
+  required double lineTotal,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$OrderItemsTableUpdateCompanionBuilder = OrderItemsCompanion Function({
+  Value<String> id,
+  Value<String> orderId,
+  Value<String?> productId,
+  Value<String> productName,
+  Value<double> unitPrice,
+  Value<int> quantity,
+  Value<double> lineTotal,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
 
 class $$OrderItemsTableFilterComposer
     extends Composer<_$AppDatabase, $OrderItemsTable> {
@@ -10458,38 +10506,36 @@ typedef $$OrderItemsTableProcessedTableManager =
       OrderItem,
       PrefetchHooks Function()
     >;
-typedef $$PaymentsTableCreateCompanionBuilder =
-    PaymentsCompanion Function({
-      required String id,
-      required String storeId,
-      required String deviceId,
-      required String orderId,
-      Value<String?> methodId,
-      Value<String> methodName,
-      Value<String> methodType,
-      required double amount,
-      Value<double?> amountReceived,
-      Value<double?> changeAmount,
-      Value<String> referenceNo,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
-typedef $$PaymentsTableUpdateCompanionBuilder =
-    PaymentsCompanion Function({
-      Value<String> id,
-      Value<String> storeId,
-      Value<String> deviceId,
-      Value<String> orderId,
-      Value<String?> methodId,
-      Value<String> methodName,
-      Value<String> methodType,
-      Value<double> amount,
-      Value<double?> amountReceived,
-      Value<double?> changeAmount,
-      Value<String> referenceNo,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
+typedef $$PaymentsTableCreateCompanionBuilder = PaymentsCompanion Function({
+  required String id,
+  required String storeId,
+  required String deviceId,
+  required String orderId,
+  Value<String?> methodId,
+  Value<String> methodName,
+  Value<String> methodType,
+  required double amount,
+  Value<double?> amountReceived,
+  Value<double?> changeAmount,
+  Value<String> referenceNo,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$PaymentsTableUpdateCompanionBuilder = PaymentsCompanion Function({
+  Value<String> id,
+  Value<String> storeId,
+  Value<String> deviceId,
+  Value<String> orderId,
+  Value<String?> methodId,
+  Value<String> methodName,
+  Value<String> methodType,
+  Value<double> amount,
+  Value<double?> amountReceived,
+  Value<double?> changeAmount,
+  Value<String> referenceNo,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
 
 class $$PaymentsTableFilterComposer
     extends Composer<_$AppDatabase, $PaymentsTable> {
@@ -10795,26 +10841,24 @@ typedef $$PaymentsTableProcessedTableManager =
       Payment,
       PrefetchHooks Function()
     >;
-typedef $$OrderVoidsTableCreateCompanionBuilder =
-    OrderVoidsCompanion Function({
-      required String id,
-      required String orderId,
-      required String deviceId,
-      required String reason,
-      required DateTime voidedAt,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
-typedef $$OrderVoidsTableUpdateCompanionBuilder =
-    OrderVoidsCompanion Function({
-      Value<String> id,
-      Value<String> orderId,
-      Value<String> deviceId,
-      Value<String> reason,
-      Value<DateTime> voidedAt,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
+typedef $$OrderVoidsTableCreateCompanionBuilder = OrderVoidsCompanion Function({
+  required String id,
+  required String orderId,
+  required String deviceId,
+  required String reason,
+  required DateTime voidedAt,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$OrderVoidsTableUpdateCompanionBuilder = OrderVoidsCompanion Function({
+  Value<String> id,
+  Value<String> orderId,
+  Value<String> deviceId,
+  Value<String> reason,
+  Value<DateTime> voidedAt,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
 
 class $$OrderVoidsTableFilterComposer
     extends Composer<_$AppDatabase, $OrderVoidsTable> {
@@ -11268,36 +11312,34 @@ typedef $$StockEventsTableProcessedTableManager =
       StockEvent,
       PrefetchHooks Function()
     >;
-typedef $$DayClosesTableCreateCompanionBuilder =
-    DayClosesCompanion Function({
-      required String id,
-      required String storeId,
-      required String deviceId,
-      required DateTime businessDate,
-      Value<double?> cashExpected,
-      Value<double?> cashActual,
-      Value<double?> variance,
-      Value<String?> closedBy,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
-typedef $$DayClosesTableUpdateCompanionBuilder =
-    DayClosesCompanion Function({
-      Value<String> id,
-      Value<String> storeId,
-      Value<String> deviceId,
-      Value<DateTime> businessDate,
-      Value<double?> cashExpected,
-      Value<double?> cashActual,
-      Value<double?> variance,
-      Value<String?> closedBy,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
+typedef $$DayClosesTableCreateCompanionBuilder = DayClosesCompanion Function({
+  required String id,
+  required String storeId,
+  required String deviceId,
+  required DateTime businessDate,
+  Value<double?> cashExpected,
+  Value<double?> cashActual,
+  Value<double?> variance,
+  Value<String?> closedBy,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
+typedef $$DayClosesTableUpdateCompanionBuilder = DayClosesCompanion Function({
+  Value<String> id,
+  Value<String> storeId,
+  Value<String> deviceId,
+  Value<DateTime> businessDate,
+  Value<double?> cashExpected,
+  Value<double?> cashActual,
+  Value<double?> variance,
+  Value<String?> closedBy,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
 
 class $$DayClosesTableFilterComposer
     extends Composer<_$AppDatabase, $DayClosesTable> {
@@ -11582,36 +11624,36 @@ typedef $$DayClosesTableProcessedTableManager =
       DayClose,
       PrefetchHooks Function()
     >;
-typedef $$SyncOutboxTableCreateCompanionBuilder =
-    SyncOutboxCompanion Function({
-      required String id,
-      required String storeId,
-      required String deviceId,
-      required String entity,
-      required String entityId,
-      required String op,
-      required String payload,
-      Value<int> attempts,
-      Value<String?> lastError,
-      Value<DateTime> createdAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
-typedef $$SyncOutboxTableUpdateCompanionBuilder =
-    SyncOutboxCompanion Function({
-      Value<String> id,
-      Value<String> storeId,
-      Value<String> deviceId,
-      Value<String> entity,
-      Value<String> entityId,
-      Value<String> op,
-      Value<String> payload,
-      Value<int> attempts,
-      Value<String?> lastError,
-      Value<DateTime> createdAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
+typedef $$SyncOutboxTableCreateCompanionBuilder = SyncOutboxCompanion Function({
+  required String id,
+  required String storeId,
+  required String deviceId,
+  required String entity,
+  required String entityId,
+  required String op,
+  required String payload,
+  Value<int> attempts,
+  Value<DateTime?> nextAttemptAt,
+  Value<String?> lastError,
+  Value<DateTime> createdAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
+typedef $$SyncOutboxTableUpdateCompanionBuilder = SyncOutboxCompanion Function({
+  Value<String> id,
+  Value<String> storeId,
+  Value<String> deviceId,
+  Value<String> entity,
+  Value<String> entityId,
+  Value<String> op,
+  Value<String> payload,
+  Value<int> attempts,
+  Value<DateTime?> nextAttemptAt,
+  Value<String?> lastError,
+  Value<DateTime> createdAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
 
 class $$SyncOutboxTableFilterComposer
     extends Composer<_$AppDatabase, $SyncOutboxTable> {
@@ -11659,6 +11701,11 @@ class $$SyncOutboxTableFilterComposer
 
   ColumnFilters<int> get attempts => $composableBuilder(
     column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11727,6 +11774,11 @@ class $$SyncOutboxTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get lastError => $composableBuilder(
     column: $table.lastError,
     builder: (column) => ColumnOrderings(column),
@@ -11775,6 +11827,11 @@ class $$SyncOutboxTableAnnotationComposer
 
   GeneratedColumn<int> get attempts =>
       $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
@@ -11825,6 +11882,7 @@ class $$SyncOutboxTableTableManager
                 Value<String> op = const Value.absent(),
                 Value<String> payload = const Value.absent(),
                 Value<int> attempts = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
@@ -11838,6 +11896,7 @@ class $$SyncOutboxTableTableManager
                 op: op,
                 payload: payload,
                 attempts: attempts,
+                nextAttemptAt: nextAttemptAt,
                 lastError: lastError,
                 createdAt: createdAt,
                 syncedAt: syncedAt,
@@ -11853,6 +11912,7 @@ class $$SyncOutboxTableTableManager
                 required String op,
                 required String payload,
                 Value<int> attempts = const Value.absent(),
+                Value<DateTime?> nextAttemptAt = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> syncedAt = const Value.absent(),
@@ -11866,6 +11926,7 @@ class $$SyncOutboxTableTableManager
                 op: op,
                 payload: payload,
                 attempts: attempts,
+                nextAttemptAt: nextAttemptAt,
                 lastError: lastError,
                 createdAt: createdAt,
                 syncedAt: syncedAt,
@@ -11896,24 +11957,22 @@ typedef $$SyncOutboxTableProcessedTableManager =
       SyncOutboxData,
       PrefetchHooks Function()
     >;
-typedef $$SettingsTableCreateCompanionBuilder =
-    SettingsCompanion Function({
-      required String storeId,
-      required String key,
-      required String value,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
-typedef $$SettingsTableUpdateCompanionBuilder =
-    SettingsCompanion Function({
-      Value<String> storeId,
-      Value<String> key,
-      Value<String> value,
-      Value<DateTime> updatedAt,
-      Value<DateTime?> syncedAt,
-      Value<int> rowid,
-    });
+typedef $$SettingsTableCreateCompanionBuilder = SettingsCompanion Function({
+  required String storeId,
+  required String key,
+  required String value,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
+typedef $$SettingsTableUpdateCompanionBuilder = SettingsCompanion Function({
+  Value<String> storeId,
+  Value<String> key,
+  Value<String> value,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> syncedAt,
+  Value<int> rowid,
+});
 
 class $$SettingsTableFilterComposer
     extends Composer<_$AppDatabase, $SettingsTable> {

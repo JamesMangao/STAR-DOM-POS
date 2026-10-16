@@ -1,0 +1,765 @@
+
+===== public base tables =====
+[
+  {
+    "tables": 32
+  }
+]
+
+===== table list =====
+[
+  {
+    "table_name": "apperrors",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "assetimages",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "bundleitems",
+    "est_rows": "59"
+  },
+  {
+    "table_name": "bundles",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "cart",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "cartitems",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "categories",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "commissionreferenceimages",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "commissions",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "commissionstatushistory",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "eventinventory",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "eventsales",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "notifications",
+    "est_rows": "132"
+  },
+  {
+    "table_name": "ordercommissions",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "orderitems",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "orders",
+    "est_rows": "6"
+  },
+  {
+    "table_name": "orderstatushistory",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "payments",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "paymentsettings",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "popupevents",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "productimages",
+    "est_rows": "58"
+  },
+  {
+    "table_name": "products",
+    "est_rows": "100"
+  },
+  {
+    "table_name": "productvariants",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "promotions",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "receipts",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "reviews",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "roles",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "shipping",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "storelocations",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "useraddresses",
+    "est_rows": "-1"
+  },
+  {
+    "table_name": "users",
+    "est_rows": "10"
+  },
+  {
+    "table_name": "wishlistitems",
+    "est_rows": "-1"
+  }
+]
+
+===== exact counts =====
+[
+  {
+    "k": "categories",
+    "n": "11"
+  },
+  {
+    "k": "commissions",
+    "n": "8"
+  },
+  {
+    "k": "orderitems",
+    "n": "8"
+  },
+  {
+    "k": "orders",
+    "n": "7"
+  },
+  {
+    "k": "paymentsettings",
+    "n": "2"
+  },
+  {
+    "k": "productimages",
+    "n": "58"
+  },
+  {
+    "k": "products",
+    "n": "100"
+  },
+  {
+    "k": "reviews",
+    "n": "28"
+  },
+  {
+    "k": "users",
+    "n": "10"
+  }
+]
+
+===== products sample =====
+[
+  {
+    "id": 1,
+    "name": "Bleeding heart",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 17,
+    "sku": "SKU-AS-0001",
+    "isactive": true
+  },
+  {
+    "id": 2,
+    "name": "Tamaraw",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 16,
+    "sku": "SKU-AS-0002",
+    "isactive": true
+  },
+  {
+    "id": 3,
+    "name": "Tarsier",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 10,
+    "sku": "SKU-AS-0003",
+    "isactive": true
+  },
+  {
+    "id": 4,
+    "name": "Goby",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 12,
+    "sku": "SKU-AS-0004",
+    "isactive": true
+  },
+  {
+    "id": 5,
+    "name": "Kalaw",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 12,
+    "sku": "SKU-AS-0005",
+    "isactive": true
+  },
+  {
+    "id": 6,
+    "name": "Irrawady",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 5,
+    "sku": "SKU-AS-0006",
+    "isactive": true
+  },
+  {
+    "id": 7,
+    "name": "Deer",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 10,
+    "sku": "SKU-AS-0007",
+    "isactive": true
+  },
+  {
+    "id": 8,
+    "name": "Punch",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 10,
+    "sku": "SKU-AS-0008",
+    "isactive": true
+  },
+  {
+    "id": 9,
+    "name": "Hollanov",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 26,
+    "sku": "SKU-AS-0009",
+    "isactive": true
+  },
+  {
+    "id": 10,
+    "name": "Hollander",
+    "categoryid": 3,
+    "baseprice": "30.00",
+    "stockquantity": 8,
+    "sku": "SKU-AS-0010",
+    "isactive": true
+  }
+]
+
+===== products per category =====
+[
+  {
+    "name": "Original Art",
+    "n": 0
+  },
+  {
+    "name": "Art Print",
+    "n": 19
+  },
+  {
+    "name": "Stickers",
+    "n": 47
+  },
+  {
+    "name": "Sticker Sheets",
+    "n": 6
+  },
+  {
+    "name": "Keychains",
+    "n": 9
+  },
+  {
+    "name": "Acrylic Charms",
+    "n": 0
+  },
+  {
+    "name": "Button Pins",
+    "n": 17
+  },
+  {
+    "name": "Bundles",
+    "n": 0
+  },
+  {
+    "name": "Custom Artwork",
+    "n": 0
+  },
+  {
+    "name": "Commission Slots",
+    "n": 0
+  },
+  {
+    "name": "Other",
+    "n": 2
+  }
+]
+
+===== categories =====
+[
+  {
+    "id": 1,
+    "name": "Original Art",
+    "displayorder": 1,
+    "isactive": false
+  },
+  {
+    "id": 2,
+    "name": "Art Print",
+    "displayorder": 2,
+    "isactive": true
+  },
+  {
+    "id": 3,
+    "name": "Stickers",
+    "displayorder": 3,
+    "isactive": true
+  },
+  {
+    "id": 11,
+    "name": "Sticker Sheets",
+    "displayorder": 4,
+    "isactive": true
+  },
+  {
+    "id": 4,
+    "name": "Keychains",
+    "displayorder": 5,
+    "isactive": true
+  },
+  {
+    "id": 5,
+    "name": "Acrylic Charms",
+    "displayorder": 5,
+    "isactive": false
+  },
+  {
+    "id": 6,
+    "name": "Button Pins",
+    "displayorder": 6,
+    "isactive": true
+  },
+  {
+    "id": 7,
+    "name": "Bundles",
+    "displayorder": 7,
+    "isactive": false
+  },
+  {
+    "id": 8,
+    "name": "Custom Artwork",
+    "displayorder": 8,
+    "isactive": false
+  },
+  {
+    "id": 9,
+    "name": "Commission Slots",
+    "displayorder": 9,
+    "isactive": false
+  },
+  {
+    "id": 10,
+    "name": "Other",
+    "displayorder": 10,
+    "isactive": true
+  }
+]
+
+===== productimages (distinct vs rows) =====
+[
+  {
+    "distinct_paths": 56,
+    "rows": 58
+  }
+]
+
+===== paymentsettings + QR =====
+[
+  {
+    "id": 1,
+    "channel": "GCASH",
+    "accountname": "RIAN DOMINIC CABREROS",
+    "accountnumber": "0970 137 5033",
+    "qrimagemime": "image/png",
+    "isenabled": true,
+    "qr_bytes": 197991,
+    "magic": "89504e470d0a1a0a",
+    "qr_md5": "707b023737e2913b883ddb8dea1f7c9a"
+  },
+  {
+    "id": 2,
+    "channel": "GOTYME",
+    "accountname": "RIAN DOMINIC CABREROS",
+    "accountnumber": "",
+    "qrimagemime": "image/png",
+    "isenabled": true,
+    "qr_bytes": 149923,
+    "magic": "89504e470d0a1a0a",
+    "qr_md5": "1136c1f65c0fe3217931980606fbbb1b"
+  }
+]
+
+===== auth.users count =====
+[
+  {
+    "auth_users": 0
+  }
+]
+
+===== public.users + auth.users counts =====
+[
+  {
+    "k": "auth.users",
+    "n": 0
+  },
+  {
+    "k": "public.users",
+    "n": 10
+  }
+]
+
+===== storage buckets =====
+[
+  {
+    "id": "assets",
+    "name": "assets",
+    "public": true
+  }
+]
+
+===== storage object counts per bucket =====
+[
+  {
+    "bucket_id": "assets",
+    "objects": 44
+  }
+]
+
+===== pg_default_acl =====
+[
+  {
+    "grantee": "postgres",
+    "schema": "storage",
+    "defaclobjtype": "S",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "grantee": "postgres",
+    "schema": "storage",
+    "defaclobjtype": "f",
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "grantee": "postgres",
+    "schema": "storage",
+    "defaclobjtype": "r",
+    "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "cron",
+    "defaclobjtype": "S",
+    "acl": "{postgres=r*w*U*/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "cron",
+    "defaclobjtype": "f",
+    "acl": "{postgres=X*/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "cron",
+    "defaclobjtype": "r",
+    "acl": "{postgres=a*r*w*d*D*x*t*m*/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "extensions",
+    "defaclobjtype": "S",
+    "acl": "{postgres=r*w*U*/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "extensions",
+    "defaclobjtype": "f",
+    "acl": "{postgres=X*/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "extensions",
+    "defaclobjtype": "r",
+    "acl": "{postgres=a*r*w*d*D*x*t*m*/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "graphql",
+    "defaclobjtype": "S",
+    "acl": "{postgres=rwU/supabase_admin,anon=rwU/supabase_admin,authenticated=rwU/supabase_admin,service_role=rwU/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "graphql",
+    "defaclobjtype": "f",
+    "acl": "{postgres=X/supabase_admin,anon=X/supabase_admin,authenticated=X/supabase_admin,service_role=X/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "graphql",
+    "defaclobjtype": "r",
+    "acl": "{postgres=arwdDxtm/supabase_admin,anon=arwdDxtm/supabase_admin,authenticated=arwdDxtm/supabase_admin,service_role=arwdDxtm/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "graphql_public",
+    "defaclobjtype": "S",
+    "acl": "{postgres=rwU/supabase_admin,anon=rwU/supabase_admin,authenticated=rwU/supabase_admin,service_role=rwU/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "graphql_public",
+    "defaclobjtype": "f",
+    "acl": "{postgres=X/supabase_admin,anon=X/supabase_admin,authenticated=X/supabase_admin,service_role=X/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "graphql_public",
+    "defaclobjtype": "r",
+    "acl": "{postgres=arwdDxtm/supabase_admin,anon=arwdDxtm/supabase_admin,authenticated=arwdDxtm/supabase_admin,service_role=arwdDxtm/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "realtime",
+    "defaclobjtype": "S",
+    "acl": "{postgres=rwU/supabase_admin,dashboard_user=rwU/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "realtime",
+    "defaclobjtype": "f",
+    "acl": "{postgres=X/supabase_admin,dashboard_user=X/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_admin",
+    "schema": "realtime",
+    "defaclobjtype": "r",
+    "acl": "{postgres=a*r*wdDxtm/supabase_admin,dashboard_user=arwdDxtm/supabase_admin}"
+  },
+  {
+    "grantee": "supabase_auth_admin",
+    "schema": "auth",
+    "defaclobjtype": "S",
+    "acl": "{postgres=rwU/supabase_auth_admin,dashboard_user=rwU/supabase_auth_admin}"
+  },
+  {
+    "grantee": "supabase_auth_admin",
+    "schema": "auth",
+    "defaclobjtype": "f",
+    "acl": "{postgres=X/supabase_auth_admin,dashboard_user=X/supabase_auth_admin}"
+  },
+  {
+    "grantee": "supabase_auth_admin",
+    "schema": "auth",
+    "defaclobjtype": "r",
+    "acl": "{postgres=arwdDxtm/supabase_auth_admin,dashboard_user=arwdDxtm/supabase_auth_admin}"
+  }
+]
+
+===== pg_cron jobs (jobid/jobname/schedule only) =====
+[
+  {
+    "jobid": "1",
+    "jobname": "delivery-sweep-daily",
+    "schedule": "0 2 * * *"
+  }
+]
+
+===== public functions (drop list) =====
+[
+  {
+    "proname": "run_delivery_sweep",
+    "args": "",
+    "lanname": "plpgsql"
+  },
+  {
+    "proname": "trg_star_dom_touch_updated_at",
+    "args": "",
+    "lanname": "plpgsql"
+  }
+]
+
+===== public views + matviews (drop list) =====
+[]
+
+===== public sequences (drop list) =====
+[
+  {
+    "relname": "apperrors_id_seq"
+  },
+  {
+    "relname": "bundleitems_id_seq"
+  },
+  {
+    "relname": "bundles_id_seq"
+  },
+  {
+    "relname": "cart_id_seq"
+  },
+  {
+    "relname": "cartitems_id_seq"
+  },
+  {
+    "relname": "categories_id_seq"
+  },
+  {
+    "relname": "commissionreferenceimages_id_seq"
+  },
+  {
+    "relname": "commissions_id_seq"
+  },
+  {
+    "relname": "commissionstatushistory_id_seq"
+  },
+  {
+    "relname": "eventinventory_id_seq"
+  },
+  {
+    "relname": "eventsales_id_seq"
+  },
+  {
+    "relname": "notifications_id_seq"
+  },
+  {
+    "relname": "ordercommissions_id_seq"
+  },
+  {
+    "relname": "orderitems_id_seq"
+  },
+  {
+    "relname": "orders_id_seq"
+  },
+  {
+    "relname": "orderstatushistory_id_seq"
+  },
+  {
+    "relname": "payments_id_seq"
+  },
+  {
+    "relname": "paymentsettings_id_seq"
+  },
+  {
+    "relname": "popupevents_id_seq"
+  },
+  {
+    "relname": "productimages_id_seq"
+  },
+  {
+    "relname": "products_id_seq"
+  },
+  {
+    "relname": "productvariants_id_seq"
+  },
+  {
+    "relname": "promotions_id_seq"
+  },
+  {
+    "relname": "receipts_id_seq"
+  },
+  {
+    "relname": "reviews_id_seq"
+  },
+  {
+    "relname": "roles_id_seq"
+  },
+  {
+    "relname": "shipping_id_seq"
+  },
+  {
+    "relname": "storelocations_id_seq"
+  },
+  {
+    "relname": "useraddresses_id_seq"
+  },
+  {
+    "relname": "users_id_seq"
+  },
+  {
+    "relname": "wishlistitems_id_seq"
+  }
+]
+
+===== public standalone types (drop list) =====
+[]
+
+===== public triggers (non-internal) =====
+[
+  {
+    "table_name": "assetimages",
+    "tgname": "trg_assetimages_updatedat"
+  },
+  {
+    "table_name": "cart",
+    "tgname": "trg_cart_updatedat"
+  },
+  {
+    "table_name": "commissions",
+    "tgname": "trg_commissions_updatedat"
+  },
+  {
+    "table_name": "orders",
+    "tgname": "trg_orders_updatedat"
+  },
+  {
+    "table_name": "paymentsettings",
+    "tgname": "trg_paymentsettings_updatedat"
+  },
+  {
+    "table_name": "popupevents",
+    "tgname": "trg_popupevents_updatedat"
+  },
+  {
+    "table_name": "products",
+    "tgname": "trg_products_updatedat"
+  },
+  {
+    "table_name": "users",
+    "tgname": "trg_users_updatedat"
+  }
+]
+
+===== cron jobs: does the command reference an object reset will drop? =====
+[
+  {
+    "jobid": "1",
+    "jobname": "delivery-sweep-daily",
+    "schedule": "0 2 * * *",
+    "references_dropped_object": true
+  }
+]
+
+sections ok 20/20

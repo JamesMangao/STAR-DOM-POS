@@ -9,18 +9,9 @@ class Fmt {
   /// ₱1,234.00 — tabular numerals, 2 decimals.
   static String peso(num v) => '₱${_peso.format(v)}';
 
-  /// {device_code}-{YYMMDD}-{seq} — seq zero-padded to 3.
-  static String orderNo(String deviceCode, DateTime now, int seq) {
-    final y = now.year % 100;
-    final m = now.month;
-    final d = now.day;
-    final ymd =
-        '${y.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}${d.toString().padLeft(2, '0')}';
-    return '$deviceCode-$ymd-${seq.toString().padLeft(3, '0')}';
-  }
-
-  /// YYMMDD key for per-day order sequences.
-  static String dayKey(DateTime now) => orderNo('', now, 0).split('-')[1];
+  // order_no and the YYMMDD day key live in OrderNo (data/logic.dart), which
+  // takes the STORE-LOCAL day (B8). A second formatter here silently used the
+  // UTC day, so it is gone.
 
   static String time(DateTime t) => DateFormat('h:mm a').format(t);
 

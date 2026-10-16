@@ -42,6 +42,16 @@ async function writeClient() {
   return { client: c, close: () => c.end() };
 }
 
+/** A writable connection's host label (hostname only; never user/password). */
+function hostLabel() {
+  const dsn = requireDsn();
+  try {
+    return new URL(dsn).hostname;
+  } catch {
+    return 'unknown-host';
+  }
+}
+
 /** True when the DSN host names the STAR:DOM project. */
 function assertProjectRef(ref) {
   const dsn = requireDsn();
@@ -59,4 +69,4 @@ function assertProjectRef(ref) {
   return host;
 }
 
-module.exports = { readOnlyClient, writeClient, assertProjectRef, requireDsn };
+module.exports = { readOnlyClient, writeClient, assertProjectRef, requireDsn, hostLabel };

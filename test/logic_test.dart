@@ -22,46 +22,85 @@ void main() {
 
   group('OrderNo', () {
     test('sequence per device/day resets next day', () {
-      expect(OrderNo.generate('A1', DateTime.utc(2026, 1, 15), 1), 'A1-260115-001');
-      expect(OrderNo.generate('A1', DateTime.utc(2026, 1, 15), 5), 'A1-260115-005');
-      expect(OrderNo.generate('A1', DateTime.utc(2026, 1, 16), 1), 'A1-260116-001');
+      expect(
+        OrderNo.generate('A1', DateTime.utc(2026, 1, 15), 1),
+        'A1-260115-001',
+      );
+      expect(
+        OrderNo.generate('A1', DateTime.utc(2026, 1, 15), 5),
+        'A1-260115-005',
+      );
+      expect(
+        OrderNo.generate('A1', DateTime.utc(2026, 1, 16), 1),
+        'A1-260116-001',
+      );
     });
 
-    test('dayKey returns YYMMDD format (UTC)', () {
-      expect(OrderNo.dayKey(DateTime.utc(2026, 1, 15)), '260115');
-      expect(OrderNo.dayKey(DateTime.utc(2026, 12, 31)), '261231');
+    test('dayKey returns YYMMDD for the STORE-LOCAL day (B8)', () {
+      expect(OrderNo.dayKey(DateTime.utc(2026, 1, 15, 4)), '260115');
+      expect(OrderNo.dayKey(DateTime.utc(2026, 12, 31, 4)), '261231');
     });
 
-    test('dayKey normalises a local timestamp to UTC', () {
-      // 2026-01-16 02:00 +08:00 == 2026-01-15 18:00 UTC.
-      final local = DateTime.utc(2026, 1, 15, 18).toLocal();
-      expect(OrderNo.dayKey(local), '260115');
+    test('dayKey uses the local day, not the UTC one', () {
+      // 2026-01-15 18:00 UTC is 2026-01-16 02:00 in Manila (UTC+8).
+      final at = DateTime.utc(2026, 1, 15, 18);
+      expect(OrderNo.dayKey(at), '260116');
+      expect(OrderNo.dayKey(at, tzOffsetMinutes: 0), '260115');
     });
   });
 
   group('BusinessDate', () {
-    test('startOfDayUtc zeroes the clock in UTC', () {
+    test('startOfDayUtc is local midnight, stored as its UTC instant (B8)', () {
+      // 23:59Z on the 15th is 07:59 on the 16th in Manila, so the business day
+      // started at 2026-01-15T16:00Z.
       expect(
         BusinessDate.startOfDayUtc(DateTime.utc(2026, 1, 15, 23, 59)),
+        DateTime.utc(2026, 1, 15, 16),
+      );
+      // With no offset it is the UTC midnight it always was.
+      expect(
+        BusinessDate.startOfDayUtc(
+          DateTime.utc(2026, 1, 15, 23, 59),
+          tzOffsetMinutes: 0,
+        ),
         DateTime.utc(2026, 1, 15),
       );
     });
 
-    test('key renders YYYY-MM-DD and sameDay compares UTC days', () {
-      expect(BusinessDate.key(DateTime.utc(2026, 1, 15, 1)), '2026-01-15');
+    test('key renders YYYY-MM-DD and sameDay compares the local day', () {
+      expect(BusinessDate.key(DateTime.utc(2026, 1, 15, 4)), '2026-01-15');
+      expect(
+        BusinessDate.sameDay(
+          DateTime.utc(2026, 1, 15, 4, 1),
+          DateTime.utc(2026, 1, 15, 15, 59),
+        ),
+        true,
+      );
+      // 00:01Z and 23:59Z on the 15th are the 15th and the 16th locally.
       expect(
         BusinessDate.sameDay(
           DateTime.utc(2026, 1, 15, 0, 1),
           DateTime.utc(2026, 1, 15, 23, 59),
         ),
+        false,
+      );
+      // …but with no offset the same pair is one UTC day.
+      expect(
+        BusinessDate.sameDay(
+          DateTime.utc(2026, 1, 15, 0, 1),
+          DateTime.utc(2026, 1, 15, 23, 59),
+          tzOffsetMinutes: 0,
+        ),
         true,
       );
+      // The old UTC rule split the Manila evening across two business days;
+      // 23:59Z and 00:01Z on the 16th are the SAME local day (the 16th).
       expect(
         BusinessDate.sameDay(
           DateTime.utc(2026, 1, 15, 23, 59),
           DateTime.utc(2026, 1, 16, 0, 1),
         ),
-        false,
+        true,
       );
     });
   });

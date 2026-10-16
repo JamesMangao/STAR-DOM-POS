@@ -6,10 +6,16 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { validate, dbUrlProblem, PROJECT_REF } = require('./env');
 
+// fake JWT with a given payload role — signature is meaningless on purpose
+const fakeJwt = (role) =>
+  'eyJhbGciOiJIUzI1NiJ9.' +
+  Buffer.from(JSON.stringify({ role })).toString('base64url') +
+  '.FAKE_SIGNATURE';
+
 const valid = () => ({
   SUPABASE_URL: `https://${PROJECT_REF}.supabase.co`,
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE_ANON',
-  SUPABASE_SERVICE_ROLE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE_SERVICE',
+  SUPABASE_ANON_KEY: fakeJwt('anon'),
+  SUPABASE_SERVICE_ROLE_KEY: fakeJwt('service_role'),
   SUPABASE_DB_URL:
     `postgresql://postgres.${PROJECT_REF}:fake-password@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`,
   OWNER_EMAIL: 'owner@example.com',
@@ -90,4 +96,55 @@ test('missing keys are all reported', () => {
 
 test('dbUrlProblem returns null for a good DSN', () => {
   assert.equal(dbUrlProblem(valid().SUPABASE_DB_URL), null);
+});
+
+// ---- key-role checks -------------------------------------------------------
+
+test('anon JWT with role "anon" is accepted', () => {
+  assert.deepEqual(validate(valid()), []);
+});
+
+test('anon JWT with role "service_role" is rejected', () => {
+  const p = validate({ ...valid(), SUPABASE_ANON_KEY: fakeJwt('service_role') });
+  assert.match(p.find(([k]) => k === 'SUPABASE_ANON_KEY')[1], /role must be "anon"/);
+});
+
+test('service JWT with role "service_role" is accepted', () => {
+  assert.deepEqual(validate(valid()), []);
+});
+
+test('service JWT with role "anon" is rejected', () => {
+  const p = validate({
+    ...valid(),
+    SUPABASE_SERVICE_ROLE_KEY: fakeJwt('anon'),
+  });
+  assert.match(
+    p.find(([k]) => k === 'SUPABASE_SERVICE_ROLE_KEY')[1],
+    /role must be "service_role"/,
+  );
+});
+
+test('sb_secret_ in the anon slot is rejected', () => {
+  const p = validate({ ...valid(), SUPABASE_ANON_KEY: 'sb_secret_FAKE' });
+  assert.match(p.find(([k]) => k === 'SUPABASE_ANON_KEY')[1], /secret key/);
+});
+
+test('sb_publishable_ in the service slot is rejected', () => {
+  const p = validate({
+    ...valid(),
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_publishable_FAKE',
+  });
+  assert.match(
+    p.find(([k]) => k === 'SUPABASE_SERVICE_ROLE_KEY')[1],
+    /publishable key/,
+  );
+});
+
+test('new-style sb_publishable_ anon + sb_secret_ service is accepted', () => {
+  const p = validate({
+    ...valid(),
+    SUPABASE_ANON_KEY: 'sb_publishable_FAKE',
+    SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_FAKE',
+  });
+  assert.deepEqual(p, []);
 });

@@ -135,8 +135,58 @@ create table if not exists sync_outbox (
 create index if not exists idx_outbox_store_created
   on sync_outbox (store_id, created_at);
 
+-- ------------------------------------------- pull cursors + LWW (A3)
+-- day_closes is mutable (LWW, one row per business_date+device): server clock +
+-- stale-write guard, same as 001.
+create or replace function lww_guard() returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if tg_op = 'UPDATE' and new.updated_at < old.updated_at then
+    return null;
+  end if;
+  new.server_updated_at := now();
+  return new;
+end $$;
+
+alter table day_closes add column if not exists server_updated_at
+  timestamptz not null default now();
+drop trigger if exists trg_day_closes_lww on day_closes;
+create trigger trg_day_closes_lww before insert or update on day_closes
+  for each row execute function lww_guard();
+create index if not exists idx_day_closes_server_updated
+  on day_closes (server_updated_at, id);
+
+-- Append-only tables carry server_created_at (there is no update to record).
+-- A row is immutable, so its cursor value never moves.
+alter table orders add column if not exists server_created_at
+  timestamptz not null default now();
+alter table order_items add column if not exists server_created_at
+  timestamptz not null default now();
+alter table payments add column if not exists server_created_at
+  timestamptz not null default now();
+alter table order_voids add column if not exists server_created_at
+  timestamptz not null default now();
+alter table stock_events add column if not exists server_created_at
+  timestamptz not null default now();
+
+create index if not exists idx_orders_server_created
+  on orders (server_created_at, id);
+create index if not exists idx_order_items_server_created
+  on order_items (server_created_at, id);
+create index if not exists idx_payments_server_created
+  on payments (server_created_at, id);
+create index if not exists idx_order_voids_server_created
+  on order_voids (server_created_at, id);
+create index if not exists idx_stock_events_server_created
+  on stock_events (server_created_at, id);
+
 -- Voided is derived — this view is the single source of truth for "voided".
-create or replace view order_status as
+-- A3/A1: security_invoker, so the view runs with the CALLER's rights. Without
+-- it the view runs as its owner and returns every store's rows to `anon`.
+drop view if exists order_status;
+create view order_status with (security_invoker = true) as
   select
     o.id,
     o.store_id,
