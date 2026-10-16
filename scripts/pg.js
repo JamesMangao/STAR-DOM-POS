@@ -12,13 +12,10 @@ const env = require('./env');
 
 function requireDsn() {
   const dsn = env.requireKeys(['SUPABASE_DB_URL']).SUPABASE_DB_URL;
-  const scheme = String(dsn).split('://')[0].toLowerCase();
-  if (scheme !== 'postgres' && scheme !== 'postgresql') {
-    // Never echo the value — only the (non-secret) scheme.
-    throw new Error(
-      `SUPABASE_DB_URL is not a Postgres connection string (scheme "${scheme || 'none'}"). ` +
-        'Use the Supabase Session-pooler URI (postgresql://...), not the https API URL.',
-    );
+  // Shape-validate BEFORE any network/DB call; message contains no value.
+  const problem = env.dbUrlProblem(dsn);
+  if (problem) {
+    throw new Error(`SUPABASE_DB_URL: ${problem}`);
   }
   return dsn;
 }

@@ -9,6 +9,7 @@
     "@supabase/supabase-js": "^2.45.0"
   },
   "scripts": {
+    "test": "node --test",
     "export": "node export.js",
     "facts": "node db-facts.js",
     "reset": "node reset.js",
