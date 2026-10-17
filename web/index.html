@@ -100,6 +100,7 @@
             window.__applyingUpdate = true;
             const r = await navigator.serviceWorker.getRegistration();
             if (r && r.waiting) r.waiting.postMessage({ type: 'SKIP_WAITING' });
+            location.reload();
           };
         } catch (e) {
           console.warn('service worker registration failed:', e);
