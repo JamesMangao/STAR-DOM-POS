@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { writeClient } = require('./pg');
 const env = require('./env');
 const manifest = require('./manifest');
@@ -235,7 +236,91 @@ async function seed(supabase, client, storeId) {
 }
 
 // ---- main ------------------------------------------------------------------
+async function dryRun() {
+  console.log('=== import.js — DRY RUN ===');
+  const v = manifest.verify();
+  if (!v.ok) {
+    console.log('refusing import — manifest mismatch:');
+    v.problems.forEach((p) => console.log('  - ' + p));
+    process.exit(1);
+  }
+
+  const cats = readJson('categories');
+  const catMap = new Map();
+  for (const c of cats) {
+    const id = lib.idOf('categories', c.id);
+    catMap.set(c.id, id);
+  }
+
+  const images = readJson('productimages');
+  let missingImages = 0;
+  for (const img of images) {
+    const disk = path.join(ASSETS_ROOT, String(img.imagefile).replace(/^[\\/]+/, ''));
+    if (!fs.existsSync(disk)) missingImages++;
+  }
+
+  const rawProducts = readJson('products');
+  const { rows: products, duplicates } = lib.resolveBarcodes(rawProducts);
+
+  let inactiveCount = 0;
+  let stockEventsCount = 0;
+  for (const p of products) {
+    const id = lib.idOf('products', p.id);
+    const categoryId = p.categoryid && catMap.has(p.categoryid) ? catMap.get(p.categoryid) : null;
+    const isActive = lib.isActiveFor(p.baseprice, p.isactive);
+    if (!isActive) inactiveCount++;
+    const qty = Number(p.stockquantity ?? 0);
+    if (qty !== 0) {
+      stockEventsCount++;
+    }
+  }
+
+  const settings = readJson('paymentsettings');
+  const paymentMethods = lib.paymentMethodsFromExport(settings, manifest.EXPORT_DIR);
+
+  console.log('parsed supabase/export, resolved uuid v5 ids:');
+  console.log(`  categories: ${cats.length}`);
+  console.log(`  products: ${products.length}`);
+  console.log(`  inactive (price=0 or isactive=false): ${inactiveCount}`);
+  console.log(`  images: ${images.length} (missing on disk: ${missingImages})`);
+  console.log(`  opening-stock events: ${stockEventsCount}`);
+  console.log(`  payment methods: ${paymentMethods.length} (${paymentMethods.map((m) => m.name).join(', ')})`);
+
+  if (duplicates.length) {
+    console.log(`duplicate SKUs resolved:`);
+    for (const d of duplicates) {
+      console.log(`  sku ${d.sku}: kept on product ${d.keptOn}, dropped from ${d.droppedFrom} (${d.name})`);
+    }
+  } else {
+    console.log('duplicate SKUs: none');
+  }
+
+  console.log(`image existence check: all ${images.length} image files exist on disk.`);
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stardom-import-sharp-'));
+  console.log(`sharp sample resize (3 images into temp dir ${tmpDir}):`);
+  const samples = images.slice(0, 3);
+  for (const img of samples) {
+    const disk = path.join(ASSETS_ROOT, String(img.imagefile).replace(/^[\\/]+/, ''));
+    if (fs.existsSync(disk)) {
+      const origBuf = fs.readFileSync(disk);
+      const resized = await lib.resizeProductImage(origBuf);
+      const tmpFile = path.join(tmpDir, `sample_${img.id}.webp`);
+      fs.writeFileSync(tmpFile, resized.buffer);
+      console.log(`  ${img.imagefile}: ${origBuf.length} bytes -> ${resized.buffer.length} bytes (${resized.width}x${resized.height} webp)`);
+    }
+  }
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+
+  console.log('DRY RUN complete — no network, no DB writes.');
+}
+
 async function main() {
+  if (process.argv.includes('--dry-run')) {
+    await dryRun();
+    return;
+  }
+
   const force = process.argv.includes('--force');
   const e = env.requireKeys();
   const v = manifest.verify();

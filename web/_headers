@@ -1,32 +1,19 @@
 # web/_headers — Cloudflare Pages response headers (W6).
-#
-# Two rules matter for this app, and they pull in opposite directions:
-#
-#   * index.html / flutter_service_worker.js / version.json / manifest.json MUST
-#     revalidate. They are the update trigger: a cached entry point is a deploy
-#     that never reaches the booth iPad.
-#   * every hashed or immutable asset (main.dart.js, canvaskit/, assets/, the
-#     sqlite3 wasm, icons) may be cached forever, which is what makes the second
-#     load instant and the offline load possible.
-#
-# W2: NO Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy here, on
-# purpose. They would enable drift's `opfsLocks` backend (and only that), but
-# cross-origin isolation also requires CORP/CORS headers on every response the
-# page fetches — including Supabase REST/Storage and signed image URLs — which
-# would break sync and offline images for no benefit: drift already reports a
-# durable IndexedDB backend without them (see the storage-mode line in Settings).
 
-/index.html
+/sw.js
   Cache-Control: no-cache, no-store, must-revalidate
 
-/flutter_service_worker.js
+/build-manifest.json
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/index.html
   Cache-Control: no-cache, no-store, must-revalidate
 
 /version.json
   Cache-Control: no-cache, no-store, must-revalidate
 
 /manifest.json
-  Cache-Control: no-cache
+  Cache-Control: no-cache, no-store, must-revalidate
 
 /sqlite3.wasm
   Content-Type: application/wasm
@@ -36,7 +23,6 @@
   Content-Type: text/javascript; charset=utf-8
   Cache-Control: public, max-age=31536000, immutable
 
-# Flutter deploy-skip files, if the build emits them.
 /main.dart.js.map
   Cache-Control: no-store
 

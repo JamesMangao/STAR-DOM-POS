@@ -76,11 +76,40 @@
     // only registration in the app. Guarded: a browser without service
     // workers still runs the POS, just without the offline shell.
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js', { scope: '.' }).catch(function (e) {
+      const initSW = async function () {
+        try {
+          const reg = await navigator.serviceWorker.register('sw.js');
+          const notify = () => {
+            if (reg.waiting && navigator.serviceWorker.controller) {
+              window.dispatchEvent(new Event('stardom-update-ready'));
+            }
+          };
+          reg.addEventListener('updatefound', () => {
+            const w = reg.installing;
+            if (w) w.addEventListener('statechange', () => { if (w.state === 'installed') notify(); });
+          });
+          notify();
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update().catch(() => {});
+          });
+          setInterval(() => reg.update().catch(() => {}), 3600000);
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (window.__applyingUpdate) location.reload();
+          });
+          window.stardomApplyUpdate = async () => {
+            window.__applyingUpdate = true;
+            const r = await navigator.serviceWorker.getRegistration();
+            if (r && r.waiting) r.waiting.postMessage({ type: 'SKIP_WAITING' });
+          };
+        } catch (e) {
           console.warn('service worker registration failed:', e);
-        });
-      });
+        }
+      };
+      if (document.readyState === 'complete') {
+        initSW();
+      } else {
+        window.addEventListener('load', initSW);
+      }
     }
   </script>
 </body>

@@ -31,6 +31,8 @@ dependencies:
   # Only for the portable network-error shape (`ClientException`), which is
   # what the browser fetch layer raises; dart:io must not appear in lib/ (W2).
   http: ^1.2.0
+  print_bluetooth_thermal: ^1.2.5
+  esc_pos_utils_plus: ^2.0.4
 
 dev_dependencies:
   flutter_test:
