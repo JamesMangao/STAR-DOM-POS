@@ -1,12 +1,15 @@
 'use strict';
 
 // scripts/font-check.js — prove the ₱ (U+20B1) actually exists in the fonts we
-// bundle, instead of assuming it.
+// bundle, instead of assuming it — and that the fonts carry the `tnum`
+// (tabular figures) GSUB feature every price style requests.
 //
 // Every peso figure in the app and on the receipt is rendered with U+20B1. A
 // font without that glyph draws a blank box (or nothing) and the receipt is
 // wrong, so this parses the TrueType `cmap` table straight out of the file: no
-// font library, no network, nothing to install.
+// font library, no network, nothing to install. The same is true of `tnum`:
+// `FontFeature.tabularFigures()` on a font that lacks the feature is silently
+// ignored, and the peso column starts jittering — so it is checked here too.
 //
 // Supported subtable formats: 0 (byte), 4 (BMP segments), 6 (trimmed), 12
 // (segmented coverage, used by modern fonts for astral planes). Format 4 alone
@@ -139,23 +142,57 @@ function hasGlyph(file, codePoint = PESO) {
   return { found: gid !== undefined && gid !== 0, glyphId: gid ?? null, mapped: table.size };
 }
 
-module.exports = { cmapTable, hasGlyph, PESO };
+/**
+ * Every OpenType layout feature tag the font declares in GSUB
+ * (e.g. 'liga', 'tnum', 'ss01'). Empty when the font has no GSUB table —
+ * a font with no layout features has no tabular figures either.
+ * @returns {string[]}
+ */
+function gsubFeatures(file) {
+  const buf = fs.readFileSync(file);
+  const numTables = buf.readUInt16BE(4);
+  let gsubOffset = 0;
+  for (let i = 0; i < numTables; i++) {
+    const rec = 12 + i * 16;
+    if (buf.toString('ascii', rec, rec + 4) === 'GSUB') {
+      gsubOffset = buf.readUInt32BE(rec + 8);
+      break;
+    }
+  }
+  if (!gsubOffset) return [];
+  // GSUB header v1.0: major(2) minor(2) scriptList(2) featureList(2) lookupList(2).
+  const featureList = gsubOffset + buf.readUInt16BE(gsubOffset + 6);
+  const count = buf.readUInt16BE(featureList);
+  const tags = [];
+  for (let i = 0; i < count; i++) {
+    tags.push(buf.toString('ascii', featureList + 2 + i * 6, featureList + 6 + i * 6));
+  }
+  return tags;
+}
+
+/** Does [file] declare the `tnum` (tabular figures) feature? */
+function hasTabularFigures(file) {
+  return gsubFeatures(file).includes('tnum');
+}
+
+module.exports = { cmapTable, hasGlyph, gsubFeatures, hasTabularFigures, PESO };
 
 if (require.main === module) {
   const files = process.argv.slice(2);
   if (files.length === 0) {
     console.error('usage: node scripts/font-check.js <font.ttf> [...]');
     process.exit(2);
-  }
-  let bad = 0;
+  }	let bad = 0;
   for (const f of files) {
     try {
       const r = hasGlyph(f, PESO);
+      const tnum = hasTabularFigures(f);
       console.log(
         `${f}: U+20B1 ₱ ${r.found ? 'PRESENT' : 'MISSING'} ` +
-          `(glyph ${r.glyphId ?? '-'}, ${r.mapped} mapped code points)`,
+          `(glyph ${r.glyphId ?? '-'}, ${r.mapped} mapped code points), ` +
+          `tnum ${tnum ? 'PRESENT' : 'MISSING'}`,
       );
-      if (!r.found) bad++;
+      if (!r.found || !tnum) bad++;
     } catch (e) {
       console.log(`${f}: ERROR ${e.message}`);
       bad++;

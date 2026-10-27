@@ -305,4 +305,39 @@ void main() {
       expect(PullPage.after(fetched, cursor, 'server_updated_at'), isEmpty);
     });
   });
+
+  // The incomplete-sync sentence: one story for both UI entry points (the
+  // sync chip and the data-loss banner). A run that pushed nothing but
+  // still leaves rows queued must explain itself — see the two hardcoded
+  // fallbacks this replaced.
+  group('PushPolicy.explainSkipped', () {
+    test('parked rows name the count, the cause and where to retry', () {
+      final msg = PushPolicy.explainSkipped([
+        const OutboxState(attempts: PushPolicy.maxAttempts),
+        const OutboxState(attempts: PushPolicy.maxAttempts),
+      ]);
+      expect(msg, contains('2 queued sales were rejected'));
+      expect(msg, contains('stopped retrying'));
+      expect(msg, contains('Settings → Sync details'));
+    });
+
+    test('one parked row reads in the singular', () {
+      final msg = PushPolicy.explainSkipped([
+        const OutboxState(attempts: PushPolicy.maxAttempts),
+      ]);
+      expect(msg, contains('1 queued sale was rejected'));
+    });
+
+    test('a row waiting out its backoff window explains the wait', () {
+      final msg = PushPolicy.explainSkipped([
+        OutboxState(attempts: 3, nextAttemptAt: DateTime.utc(2026, 10, 23)),
+      ]);
+      expect(msg, contains('retries automatically'));
+      expect(msg, contains('Settings → Sync details'));
+    });
+
+    test('nothing queued — nothing to explain', () {
+      expect(PushPolicy.explainSkipped(const <OutboxState>[]), isNull);
+    });
+  });
 }

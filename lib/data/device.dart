@@ -71,6 +71,15 @@ class DeviceRegistry {
   Future<void> _remember(String storeId, String deviceId) =>
       _db.setLocalSetting(storeId, _kDeviceId, deviceId);
 
+  /// Rename this device AND refresh the cached row, so the next receipt
+  /// already carries the new name (the registry caches [current] in memory).
+  Future<void> rename(String name) async {
+    final d = _current;
+    if (d == null) return;
+    await _db.renameDevice(d.id, name);
+    _current = await _db.deviceById(d.id) ?? d.copyWith(deviceName: name);
+  }
+
   /// The store this install belongs to: the single seeded store row.
   Future<String?> savedStoreId() async {
     final stores = await _db.allStores();
@@ -82,9 +91,17 @@ class DeviceRegistry {
   /// the device id, so a retry returns the same code. Returns true when the
   /// device now has one; offline it simply returns false and the caller keeps
   /// blocking sales.
+  ///
+  /// Before minting a brand-new row, the registry CLAIMS an existing one: the
+  /// identity the browser minted is lost when the owner (or the browser)
+  /// clears site data, and re-attaching to the SAME server row instead of
+  /// registering a fresh one is what stops the devices table growing a new
+  /// "Booth iPad" twin on every wipe. Registration itself is still the
+  /// fallback when nothing claimable exists (a genuinely new device).
   Future<bool> registerWithServer({required String storeId}) async {
     final device = _current ?? await ensureRegistered(storeId);
     if (device.deviceCode.isNotEmpty) return true;
+    if (await _adoptExisting(storeId, device)) return true;
     if (!Api.instance.isReady) return false;
     try {
       final res = await Api.instance.registerDevice(
@@ -107,6 +124,48 @@ class DeviceRegistry {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Adopt this store's existing server row as THIS install's identity when
+  /// the mirror says it must be the same booth.
+  ///
+  /// The match is name-based on purpose. The mirror row comes from the
+  /// server's devices (every sync pull refreshes it), so by the time a claim
+  /// succeeds the row already carries a `device_code` — a code that receipts
+  /// may already show and order numbers may already embed, which a fresh
+  /// registration would silently recycle a lookalike of.
+  ///
+  /// Returns false (and touches nothing) when:
+  ///  * the mirror is empty / has no live twin — genuinely new hardware, or
+  ///    the very first booth on a store;
+  ///  * every equal-name row is code-less, i.e. mirror rows of THIS install's
+  ///    own unregistered placeholder.
+  Future<bool> _adoptExisting(String storeId, Device device) async {
+    try {
+      await _refreshMirror(storeId);
+      final twin = await _db.claimableDevice(storeId, device.deviceName);
+      if (twin == null) return false;
+      await _db.adoptDevice(storeId: storeId, oldId: device.id, from: twin);
+      _current = await _db.deviceById(twin.id) ?? twin;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Keep the local device mirror close enough to claim against even before
+  /// the first pull: on a virgin browser the registration runs BEFORE the
+  /// pull of the same tick, so the mirror alone would always miss.
+  Future<void> _refreshMirror(String storeId) async {
+    if (!Api.instance.isReady) return;
+    final remote = await Api.instance.listDevices(storeId);
+    for (final row in remote) {
+      try {
+        await _db.applyRemoteRow('devices', row);
+      } catch (_) {
+        // A row we cannot mirror is a row we must not claim from.
+      }
     }
   }
 

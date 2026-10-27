@@ -32,6 +32,10 @@ class AppTheme {
     fontSize: size,
     height: height,
     letterSpacing: spacing,
+    // Design §1.2: tabular figures on every Sora style (both bundled fonts
+    // carry `tnum` — `node scripts/font-check.js` proves it), so prices,
+    // KPIs and the keypad change without the digits dancing.
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
 
   static TextStyle _jakarta(double size, {double height = 1.6}) => TextStyle(
@@ -106,6 +110,15 @@ class AppTheme {
         color: AppColors.line,
         thickness: 1,
         space: 1,
+      ),
+      // Desktop / PC: thin overlay scrollbars so long lists stay usable with a
+      // mouse on wide windows without eating screen real-estate.
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStatePropertyAll(AppColors.line),
+        trackColor: WidgetStatePropertyAll(const Color(0x0D000000)),
+        radius: const Radius.circular(AppRadius.pill),
+        thickness: WidgetStatePropertyAll(6.0),
+        minThumbLength: 48,
       ),
     );
   }

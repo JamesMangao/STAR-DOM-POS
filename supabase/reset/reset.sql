@@ -179,7 +179,9 @@ declare
   t text;
 begin
   foreach t in array trig_tables loop
-    execute format('drop trigger if exists trg_%s_updatedat on public.%I', t, t);
+    if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = t) then
+      execute format('drop trigger if exists trg_%s_updatedat on public.%I', t, t);
+    end if;
   end loop;
 
   foreach s in array seqs loop

@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
   supabase_flutter: ^2.8.0
   # Pinned family: the web worker in web/drift_worker.js is compiled from THIS
   # drift version (web/drift_worker.dart → dart compile js), so the worker and
@@ -31,8 +31,7 @@ dependencies:
   # Only for the portable network-error shape (`ClientException`), which is
   # what the browser fetch layer raises; dart:io must not appear in lib/ (W2).
   http: ^1.2.0
-  print_bluetooth_thermal: ^1.2.5
-  esc_pos_utils_plus: ^2.0.4
+
 
 dev_dependencies:
   flutter_test:
@@ -40,7 +39,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.25.0
   build_runner: ^2.4.0
-  sqlite3: ^2.4.0
+  sqlite3: ^3.7.1
 
 flutter:
   uses-material-design: true
@@ -48,6 +47,18 @@ flutter:
   assets:
     - assets/fonts/
     - assets/images/
+    # The shop's shelf: the catalogue (products, categories, bundle deals)
+    # and the artwork, so a booth with no signal still shows the real shop.
+    - assets/catalogue/
+    - assets/catalogue/images/
+    # Brand logo used in the app bar and splash.
+    - assets/stardom-logo.webp
+    # The PNG copy of the same logo, embedded into the receipt PDF (the PDF
+    # library accepts PNG/JPEG only, not the webp above).
+    - assets/android-chrome-512x512.png
+    # The collab partner mark, in every brand lockup (sell header, sign-in,
+    # splash and receipt).
+    - assets/ka1ofakind.png
 
   fonts:
     # Bundled, never fetched at runtime (W3): no google_fonts, no CDN.

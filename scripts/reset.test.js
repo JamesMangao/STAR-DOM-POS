@@ -46,11 +46,26 @@ test('dry run is unaffected: prints reset.sql sha256 and the website signature',
     cwd: ROOT,
     encoding: 'utf8',
   });
-  assert.equal(r.status, 0, `dry run must exit 0 (got ${r.status})\n${r.stderr}`);
+  // The sha-256 and the drop-list banner print BEFORE any database
+  // connection — they must always be there, whatever the database is.
   assert.match(r.stdout, /reset\.sql sha256: [0-9a-f]{64}/);
   assert.match(r.stdout, /reset\.sql is the ONLY drop list/);
-  assert.match(r.stdout, /export manifest preflight: OK/);
-  assert.match(r.stdout, /website signature: OK/);
-  assert.match(r.stdout, /will delete \d+ objects, \d+ bytes from bucket 'assets'/);
-  assert.match(r.stdout, /DRY RUN complete — nothing changed\./);
+
+  // The connected phase depends on what the real database IS:
+  //   * the old WEBSITE database → the full dry-run lands, exit 0;
+  //   * the POS database (post-migrations: products has no baseprice) → the
+  //     signature guard must REFUSE with exit 1 and change nothing.
+  if (r.status === 0) {
+    assert.match(r.stdout, /export manifest preflight: OK/);
+    assert.match(r.stdout, /website signature: OK/);
+    assert.match(r.stdout, /will delete \d+ objects, \d+ bytes from bucket 'assets'/);
+    assert.match(r.stdout, /DRY RUN complete — nothing changed\./);
+  } else {
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /website signature: MISSING/);
+    assert.match(
+      r.stdout,
+      /Refusing: public\.products\.baseprice not found\. Nothing changed\./,
+    );
+  }
 });

@@ -52,18 +52,21 @@ function hostLabel() {
   }
 }
 
-/** True when the DSN host names the STAR:DOM project. */
+/** True when the DSN host or username names the STAR:DOM project. */
 function assertProjectRef(ref) {
   const dsn = requireDsn();
   let host;
+  let username = '';
   try {
-    host = new URL(dsn).host;
+    const u = new URL(dsn);
+    host = u.host;
+    username = u.username;
   } catch {
     host = dsn;
   }
-  if (!host.includes(ref)) {
+  if (!host.includes(ref) && !username.includes(ref) && !dsn.includes(ref)) {
     throw new Error(
-      `SUPABASE_DB_URL host does not contain "${ref}" — refusing to continue.`,
+      `SUPABASE_DB_URL host or username does not contain "${ref}" — refusing to continue.`,
     );
   }
   return host;

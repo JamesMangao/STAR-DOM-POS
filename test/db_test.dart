@@ -140,6 +140,13 @@ void main() {
               .getSingle())
           .data;
 
+  /// A one-row advanced PullCursor, exactly the way sync.dart's pull loop
+  /// writes them — so a stored value parses back non-empty.
+  PullCursor cursorAt(DateTime at, String col) =>
+      const PullCursor(cursorValue: null, lastPk: null).advance([
+        {'id': 'row-1', col: at.toIso8601String()},
+      ], col);
+
   // ------------------------------------------------------- createOrder (F1)
 
   group('createOrder — one transaction', () {
@@ -815,6 +822,7 @@ void main() {
       imagePath: null,
       stockQuantity: 0,
       isActive: true,
+      stockStatus: 'In Stock',
       createdAt: DateTime.utc(2026, 1, 1),
       updatedAt: DateTime.utc(2026, 1, 1),
       deletedAt: null,
@@ -878,6 +886,95 @@ void main() {
       expect(rows.single.payload, contains('First')); // payload unchanged
       expect(rows.single.attempts, 1); // backoff state preserved
     });
+
+    test(
+      'resetOutboxAttempts: re-pull gives parked rows a fresh start but '
+      'keeps their last_error and never touches synced rows',
+      () async {
+        await seedStore();
+        await seedDevice();
+        await db.upsertProduct(
+          product('Sticker'),
+          deviceId: 'device-1',
+          storeId: 'store-1',
+        );
+        final row = (await (db.select(
+          db.syncOutbox,
+        )..where((t) => t.entity.equals('products'))).get()).single;
+
+        // A row the server rejected maxAttempts times: parked, far-future
+        // backoff, and the reason recorded.
+        await db.markOutboxFailed(
+          row.id,
+          'attempt 8 failed: HTTP 403: RLS said no',
+          attempts: 8,
+          nextAttemptAt: DateTime.utc(2026, 3, 1),
+        );
+        await db.markOutboxSynced(row.id);
+        final synced = (await (db.select(
+          db.syncOutbox,
+        )..where((t) => t.entity.equals('products'))).get()).single;
+        expect(synced.syncedAt, isNotNull);
+
+        // Now a second, unsynced row to be the one recovery resets. Its own
+        // id, so the deterministic outbox key differs from the synced one.
+        await db.upsertProduct(
+          Product(
+            id: 'p2',
+            storeId: 'store-1',
+            categoryId: null,
+            name: 'Mug',
+            price: 10,
+            barcode: null,
+            imagePath: null,
+            stockQuantity: 0,
+            isActive: true,
+            stockStatus: 'In Stock',
+            createdAt: DateTime.utc(2026, 1, 1),
+            updatedAt: DateTime.utc(2026, 1, 1),
+            deletedAt: null,
+            syncedAt: null,
+          ),
+          deviceId: 'device-1',
+          storeId: 'store-1',
+        );
+        final pending = (await db.pendingOutbox('store-1'))
+            .where((r) => r.entity == 'products')
+            .single;
+        await db.markOutboxFailed(
+          pending.id,
+          'attempt 8 failed: HTTP 403: RLS said no',
+          attempts: 8,
+          nextAttemptAt: DateTime.utc(2026, 3, 1),
+        );
+
+        await db.resetOutboxAttempts('store-1');
+
+        final after = await (db.select(
+          db.syncOutbox,
+        )..where((t) => t.id.equals(pending.id))).getSingle();
+        expect(after.attempts, 0, reason: 'parked no more');
+        expect(
+          after.nextAttemptAt,
+          isNull,
+          reason: 'the old backoff window must not stall the recovery run',
+        );
+        expect(
+          after.lastError,
+          'attempt 8 failed: HTTP 403: RLS said no',
+          reason: 'the reason stays readable until a new result replaces it',
+        );
+        final syncedAfter = (await (db.select(
+          db.syncOutbox,
+        )..where((t) => t.id.equals(synced.id))).getSingle());
+        expect(syncedAfter.syncedAt, isNotNull, reason: 'synced stays synced');
+        expect(
+          syncedAfter.attempts,
+          8,
+          reason: 'recovery must not rewrite rows that already landed',
+        );
+      },
+    );
   });
 
   // ---------------------------- applying what the server sends (B1, B2, B3)
@@ -1142,6 +1239,645 @@ void main() {
       await seedStore();
       expect(await db.applyRemoteRow('not_a_table', {'id': 'x'}), isFalse);
     });
+
+    test('categories: a same-name local twin merges into the server row '
+        '(the Sell chips never double)', () async {
+      await seedStore();
+      // A demo-era local category (created before this device ever pulled)
+      // with its own id, plus a local product pointing at it.
+      await db
+          .into(db.categories)
+          .insert(
+            CategoriesCompanion.insert(
+              id: 'cat-local',
+              storeId: 'store-1',
+              name: 'Stickers',
+              createdAt: Value(DateTime.utc(2026, 1, 1)),
+              updatedAt: Value(DateTime.utc(2026, 1, 1)),
+            ),
+          );
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p-local',
+              storeId: 'store-1',
+              name: 'Local sticker',
+              price: 10,
+              categoryId: const Value('cat-local'),
+              stockQuantity: const Value(3),
+              updatedAt: DateTime.utc(2026, 1, 1),
+            ),
+          );
+
+      final applied = await db.applyRemoteRow('categories', {
+        'id': 'cat-server',
+        'store_id': 'store-1',
+        'name': 'Stickers',
+        'is_active': true,
+        'created_at': '2026-02-01T00:00:00Z',
+        'updated_at': '2026-02-01T00:00:00Z',
+      });
+
+      expect(applied, isTrue);
+      // Exactly ONE row per name, and it is the server's id.
+      final rows = await db
+          .customSelect(
+            'SELECT id FROM categories WHERE name = ?',
+            variables: [Variable<String>('Stickers')],
+          )
+          .get();
+      expect(rows.map((r) => r.data['id']), [
+        'cat-server',
+      ], reason: 'the pulled row must not double an existing same-name chip');
+      // The local product follows the server id — no orphaned category.
+      expect(
+        (await rawRow('products', 'p-local'))['category_id'],
+        'cat-server',
+      );
+      expect(await count('categories'), 1);
+      expect(await count('products'), 1);
+    });
+
+    test('categories: a local twin NEWER than the remote row keeps its content '
+        'but ADOPTS the server id', () async {
+      await seedStore();
+      await db
+          .into(db.categories)
+          .insert(
+            CategoriesCompanion.insert(
+              id: 'cat-local',
+              storeId: 'store-1',
+              name: 'Stickers',
+              sortOrder: const Value(4),
+              createdAt: Value(DateTime.utc(2026, 1, 1)),
+              updatedAt: Value(DateTime.utc(2026, 3, 1)), // newer than the pull
+            ),
+          );
+      final applied = await db.applyRemoteRow('categories', {
+        'id': 'cat-server',
+        'store_id': 'store-1',
+        'name': 'Stickers',
+        'sort_order': 0,
+        'is_active': true,
+        'created_at': '2026-02-01T00:00:00Z',
+        'updated_at': '2026-02-01T00:00:00Z',
+      });
+      expect(applied, isTrue);
+      expect(await count('categories'), 1);
+      expect(
+        (await rawRow('categories', 'cat-server'))['sort_order'],
+        4,
+        reason:
+            'the newer local content survives on the server\u2019s identity —'
+            'the two ids must never drift apart',
+      );
+    });
+  });
+
+  // ------------------------------------------------- the dedupe kernel (006)
+  //
+  // One name = one row, at every layer: the pull-time merge, the post-pull
+  // dedupe and (in migration 006) the server's unique index all use the SAME
+  // normalisation, so "PHM" vs "phm" can never survive as two shelf rows.
+
+  group('dedupe kernel — normalised names, tombstones by id only', () {
+    test('products: a CASE-variant twin ADOPTS the server id', () async {
+      await seedStore();
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p-local',
+              storeId: 'store-1',
+              name: 'PHM', // local seed, its own id
+              price: 30,
+              stockQuantity: const Value(5),
+              updatedAt: DateTime.utc(2026, 1, 1),
+            ),
+          );
+
+      final applied = await db.applyRemoteRow('products', {
+        'id': 'p-server',
+        'store_id': 'store-1',
+        'name': 'phm', // same shelf item, different case
+        'price': 30.0,
+        'created_at': '2026-02-01T00:00:00Z',
+        'updated_at': '2026-02-01T00:00:00Z',
+      });
+
+      expect(applied, isTrue);
+      expect(
+        await count('products'),
+        1,
+        reason: 'a case-variant twin must not double the Sell grid',
+      );
+      // The SERVER's id is the identity: 006 refuses a second live row with
+      // this name, so a device that kept the local id could never push again.
+      expect((await db.listProducts('store-1')).single.id, 'p-server');
+      expect(
+        (await rawRow('products', 'p-server'))['stock_quantity'],
+        5,
+        reason:
+            'stock carried with no events behind it (CSV import) must '
+            'not be zeroed by the identity move',
+      );
+    });
+
+    test(
+      'products: a twin carrying the SAME barcode adopts the server id '
+      'instead of tripping the unique barcode index',
+      () async {
+        await seedStore();
+        await db
+            .into(db.products)
+            .insert(
+              ProductsCompanion.insert(
+                id: 'p-local',
+                storeId: 'store-1',
+                name: 'Sticker Pack',
+                price: 50,
+                barcode: const Value('4800000000017'),
+                updatedAt: DateTime.utc(2026, 1, 1),
+              ),
+            );
+
+        // The wipe-a-phone case: the catalogue seed created a LOCAL twin,
+        // the server row carries the same shelf item — same normalised name
+        // AND the same barcode (both come from the source inventory sheet).
+        final applied = await db.applyRemoteRow('products', {
+          'id': 'p-server',
+          'store_id': 'store-1',
+          'name': 'sticker  pack', // case/spacing variant of the local name
+          'price': 50.0,
+          'barcode': '4800000000017',
+          'created_at': '2026-02-01T00:00:00Z',
+          'updated_at': '2026-02-01T00:00:00Z',
+        });
+
+        expect(
+          applied,
+          isTrue,
+          reason:
+              'the pull must APPLY this row — a throw here is what wedges '
+              'the pull behind 25 unapplyable products',
+        );
+        expect(await count('products'), 1, reason: 'merged, not duplicated');
+        expect((await db.listProducts('store-1')).single.id, 'p-server');
+        expect(
+          (await rawRow('products', 'p-server'))['barcode'],
+          '4800000000017',
+          reason: 'the scan code must survive the identity move',
+        );
+      },
+    );
+
+    test('products: adopting the server id takes the sales and stock events '
+        'with it', () async {
+      await seedStore();
+      await seedDevice('device-1', 'A1');
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p-local',
+              storeId: 'store-1',
+              name: 'Goby',
+              price: 30,
+              updatedAt: DateTime.utc(2026, 1, 1),
+            ),
+          );
+      await db
+          .into(db.orders)
+          .insert(
+            OrdersCompanion.insert(
+              id: 'o-1',
+              storeId: 'store-1',
+              deviceId: 'device-1',
+              orderNo: 'A1-260101-001',
+              subtotal: const Value(30),
+              total: 30,
+              updatedAt: Value(DateTime.utc(2026, 1, 1)),
+            ),
+          );
+      await db
+          .into(db.orderItems)
+          .insert(
+            OrderItemsCompanion.insert(
+              id: 'oi-1',
+              orderId: 'o-1',
+              productId: const Value('p-local'),
+              productName: 'Goby',
+              unitPrice: 30,
+              quantity: 1,
+              lineTotal: 30,
+            ),
+          );
+      await db
+          .into(db.stockEvents)
+          .insert(
+            StockEventsCompanion.insert(
+              id: 'se-1',
+              storeId: 'store-1',
+              productId: 'p-local',
+              delta: -1,
+              reason: 'sale',
+              deviceId: const Value('device-1'),
+              createdAt: Value(DateTime.utc(2026, 1, 1)),
+            ),
+          );
+
+      await db.applyRemoteRow('products', {
+        'id': 'p-server',
+        'store_id': 'store-1',
+        'name': 'Goby',
+        'price': 30.0,
+        'created_at': '2026-02-01T00:00:00Z',
+        'updated_at': '2026-02-01T00:00:00Z',
+      });
+
+      expect((await rawRow('order_items', 'oi-1'))['product_id'], 'p-server');
+      expect((await rawRow('stock_events', 'se-1'))['product_id'], 'p-server');
+      expect(
+        (await rawRow('products', 'p-server'))['stock_quantity'],
+        -1,
+        reason: 'the mirror is recomputed from the events that moved over',
+      );
+      expect(await db.listProducts('store-1'), hasLength(1));
+    });
+
+    test('products: a NEWER local twin keeps its content and re-targets its '
+        'pending push at the server id', () async {
+      await seedStore();
+      final local = Product(
+        id: 'p-local',
+        storeId: 'store-1',
+        categoryId: null,
+        name: 'PHM',
+        price: 35, // the owner corrected the price offline
+        barcode: null,
+        imagePath: null,
+        stockQuantity: 4,
+        isActive: true,
+        stockStatus: 'In Stock',
+        createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 3, 1), // newer than the pull
+        deletedAt: null,
+        syncedAt: null,
+      );
+      await db.upsertProduct(local, deviceId: 'device-1', storeId: 'store-1');
+      // upsertProduct stamps its own clock; force the offline edit to be newer
+      // than the row about to be pulled.
+      await (db.update(db.products)..where((t) => t.id.equals('p-local')))
+          .write(ProductsCompanion(updatedAt: Value(DateTime.utc(2026, 3, 1))));
+
+      await db.applyRemoteRow('products', {
+        'id': 'p-server',
+        'store_id': 'store-1',
+        'name': 'phm',
+        'price': 30.0,
+        'created_at': '2026-02-01T00:00:00Z',
+        'updated_at': '2026-02-01T00:00:00Z',
+      });
+
+      expect(
+        (await rawRow('products', 'p-server'))['price'],
+        35.0,
+        reason: 'the newer local price stays on screen',
+      );
+      // The pending create followed the identity — otherwise the next push
+      // would re-create the twin and 006 would refuse it forever.
+      final pending = await db.pendingOutbox('store-1');
+      final productEvents = pending.where((e) => e.entity == 'products');
+      expect(productEvents, hasLength(1));
+      expect(productEvents.single.entityId, 'p-server');
+      expect(productEvents.single.payload, contains('"price":35'));
+    });
+
+    test('products: pre-existing duplicates do not break the pull '
+        '(getSingleOrNull used to throw mid-page)', () async {
+      await seedStore();
+      // The bug's precondition: TWO live rows share a normalised name.
+      for (final id in ['p-a', 'p-b']) {
+        await db
+            .into(db.products)
+            .insert(
+              ProductsCompanion.insert(
+                id: id,
+                storeId: 'store-1',
+                name: id == 'p-a' ? 'Goby' : 'Goby',
+                price: 30,
+                stockQuantity: const Value(1),
+                updatedAt: DateTime.utc(2026, 1, 1),
+              ),
+            );
+      }
+      // A re-pull of one of them must APPLY, not throw and wedge the cursor.
+      final applied = await db.applyRemoteRow('products', {
+        'id': 'p-a',
+        'store_id': 'store-1',
+        'name': 'Goby',
+        'price': 35.0,
+        'created_at': '2026-01-01T00:00:00Z',
+        'updated_at': '2026-02-01T00:00:00Z',
+      });
+      expect(applied, isTrue);
+      expect((await rawRow('products', 'p-a'))['price'], 35.0);
+    });
+
+    test('a TOMBSTONE reaches its exact id only — it never kills the '
+        'live twin that survived the server merge', () async {
+      await seedStore();
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p-live',
+              storeId: 'store-1',
+              name: 'Tamaraw',
+              price: 30,
+              stockQuantity: const Value(2),
+              updatedAt: DateTime.utc(2026, 1, 1),
+            ),
+          );
+
+      // The server merged the dupes and hard-deletes the loser; an older
+      // server build may still send tombstones. Applying one by NAME would
+      // delete the survivor.
+      final applied = await db.applyRemoteRow('products', {
+        'id': 'p-dead',
+        'store_id': 'store-1',
+        'name': 'tamaraw',
+        'price': 30.0,
+        'created_at': '2026-01-01T00:00:00Z',
+        'updated_at': '2026-03-01T00:00:00Z',
+        'deleted_at': '2026-03-01T00:00:00Z',
+      });
+
+      expect(
+        applied,
+        isFalse,
+        reason: 'a dead row with no local id is dropped',
+      );
+      expect(await count('products'), 1);
+      expect(
+        (await rawRow('products', 'p-live'))['deleted_at'],
+        null,
+        reason: 'the tombstone must not leak onto the surviving twin',
+      );
+
+      // The SAME tombstone for an id this device holds does apply.
+      final appliedKnown = await db.applyRemoteRow('products', {
+        'id': 'p-live',
+        'store_id': 'store-1',
+        'name': 'Tamaraw',
+        'price': 30.0,
+        'created_at': '2026-01-01T00:00:00Z',
+        'updated_at': '2026-03-02T00:00:00Z',
+        'deleted_at': '2026-03-02T00:00:00Z',
+      });
+      expect(appliedKnown, isTrue);
+      expect(await db.listProducts('store-1'), isEmpty);
+    });
+
+    test('payment methods: a pulled same-name twin merges and repoints '
+        'orders (the six-Cash case)', () async {
+      await seedStore();
+      await seedDevice();
+      await db
+          .into(db.paymentMethods)
+          .insert(
+            PaymentMethodsCompanion.insert(
+              id: 'cash-local',
+              storeId: 'store-1',
+              name: 'Cash',
+              type: 'cash',
+              updatedAt: DateTime.utc(2026, 1, 1),
+            ),
+          );
+      await db
+          .into(db.orders)
+          .insert(
+            OrdersCompanion.insert(
+              id: 'o-1',
+              storeId: 'store-1',
+              deviceId: 'device-1',
+              orderNo: 'A1-260115-001',
+              subtotal: const Value(100),
+              total: 100,
+              paymentMethodId: const Value('cash-local'),
+              updatedAt: Value(DateTime.utc(2026, 1, 2)),
+            ),
+          );
+
+      final applied = await db.applyRemoteRow('payment_methods', {
+        'id': 'cash-server',
+        'store_id': 'store-1',
+        'name': 'Cash',
+        'type': 'cash',
+        'created_at': '2026-02-01T00:00:00Z',
+        'updated_at': '2026-02-01T00:00:00Z',
+      });
+
+      expect(applied, isTrue);
+      expect(
+        await db.listPaymentMethods('store-1'),
+        hasLength(1),
+        reason: 'the checkout must show ONE Cash button, not six',
+      );
+      expect(
+        (await rawRow('orders', 'o-1'))['payment_method_id'],
+        'cash-server',
+        reason: 'history follows the surviving id',
+      );
+    });
+
+    test('deduplicateProducts: case-variant twins collapse onto the row '
+        'with sales history', () async {
+      await seedStore();
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p-keep',
+              storeId: 'store-1',
+              name: 'Santan',
+              price: 30,
+              stockQuantity: const Value(1),
+              createdAt: Value(DateTime.utc(2026, 1, 1)),
+              updatedAt: DateTime.utc(2026, 1, 1),
+            ),
+          );
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p-twin',
+              storeId: 'store-1',
+              name: 'santan ', // case + trailing space variant
+              price: 30,
+              stockQuantity: const Value(1),
+              createdAt: Value(DateTime.utc(2026, 1, 2)),
+              updatedAt: DateTime.utc(2026, 1, 2),
+            ),
+          );
+      // The twin carries the only order_items reference: it must win.
+      await db
+          .into(db.orders)
+          .insert(
+            OrdersCompanion.insert(
+              id: 'o-1',
+              storeId: 'store-1',
+              deviceId: 'device-1',
+              orderNo: 'A1-260115-001',
+              subtotal: const Value(30),
+              total: 30,
+              updatedAt: Value(DateTime.utc(2026, 1, 2)),
+            ),
+          );
+      await db
+          .into(db.orderItems)
+          .insert(
+            OrderItemsCompanion.insert(
+              id: 'oi-1',
+              orderId: 'o-1',
+              productId: const Value('p-twin'),
+              productName: 'santan',
+              unitPrice: 30,
+              quantity: 1,
+              lineTotal: 30,
+            ),
+          );
+
+      // The LOSING twin also carries stock history: it must follow the
+      // survivor, or stock silently drops on every merged shelf item.
+      await db
+          .into(db.stockEvents)
+          .insert(
+            StockEventsCompanion.insert(
+              id: 'se-1',
+              storeId: 'store-1',
+              productId: 'p-keep',
+              delta: 4,
+              reason: 'import',
+              createdAt: Value(DateTime.utc(2026, 1, 2)),
+            ),
+          );
+
+      await db.deduplicateProducts('store-1');
+
+      expect(await count('products'), 1);
+      expect((await rawRow('products', 'p-twin'))['name'], 'santan ');
+      expect((await rawRow('order_items', 'oi-1'))['product_id'], 'p-twin');
+      expect(
+        (await rawRow('stock_events', 'se-1'))['product_id'],
+        'p-twin',
+        reason: 'stock history must not be stranded on a deleted row',
+      );
+      expect(
+        (await rawRow('products', 'p-twin'))['stock_quantity'],
+        4,
+        reason: 'the mirror is rebuilt from the events that moved onto it',
+      );
+    });
+
+    test(
+      'deduplicateDevices retires a stale name WITHOUT deleting a device row',
+      () async {
+        await seedStore();
+        // A referenced twin (the most orders) AND the local device, same name.
+        await db
+            .into(db.devices)
+            .insert(
+              DevicesCompanion.insert(
+                id: 'dev-old',
+                storeId: 'store-1',
+                deviceName: 'Booth iPad',
+                deviceCode: 'A1',
+                createdAt: Value(DateTime.utc(2026, 1, 1)),
+                updatedAt: Value(DateTime.utc(2026, 1, 1)),
+              ),
+            );
+        await seedDevice('dev-own', 'A2'); // deviceName 'Phone' by default…
+        await (db.update(db.devices)..where((t) => t.id.equals('dev-own')))
+            .write(const DevicesCompanion(deviceName: Value('Booth iPad')));
+        await db.setLocalSetting('store-1', 'device_id', 'dev-own');
+        await db
+            .into(db.orders)
+            .insert(
+              OrdersCompanion.insert(
+                id: 'o-1',
+                storeId: 'store-1',
+                deviceId: 'dev-old',
+                orderNo: 'A1-260115-001',
+                subtotal: const Value(30),
+                total: 30,
+                updatedAt: Value(DateTime.utc(2026, 1, 2)),
+              ),
+            );
+
+        await db.deduplicateDevices('store-1');
+
+        final devs = await db.listDevices('store-1');
+        expect(
+          devs.map((d) => d.id).toList()..sort(),
+          ['dev-old', 'dev-own'],
+          reason:
+              'a device row is an identity with its own order-number prefix: '
+              'the stale one is retired, never deleted',
+        );
+        expect(
+          {for (final d in devs) d.id: d.isActive},
+          {'dev-old': false, 'dev-own': true},
+          reason:
+              'this install stays active; the older re-registration is retired',
+        );
+        // The sale still belongs to the device that issued its order number.
+        expect((await rawRow('orders', 'o-1'))['device_id'], 'dev-old');
+      },
+    );
+
+    test('the UI guard: liveXByName is normalised and excludes self', () async {
+      await seedStore();
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p1',
+              storeId: 'store-1',
+              name: 'Gay af',
+              price: 30,
+              stockQuantity: const Value(1),
+              updatedAt: DateTime.utc(2026, 1, 1),
+            ),
+          );
+      expect((await db.liveProductByName('store-1', 'gay  af'))?.id, 'p1');
+      expect(
+        await db.liveProductByName('store-1', 'GAY AF', excludeId: 'p1'),
+        isNull,
+        reason: 'editing a row must not collide with itself',
+      );
+      // A tombstoned row no longer claims the name.
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: 'p2',
+              storeId: 'store-1',
+              name: 'Jade',
+              price: 30,
+              stockQuantity: const Value(1),
+              deletedAt: Value(DateTime.utc(2026, 1, 2)),
+              updatedAt: DateTime.utc(2026, 1, 2),
+            ),
+          );
+      expect(await db.liveProductByName('store-1', 'jade'), isNull);
+      expect(
+        (await db.liveCategoryByName('store-1', 'any')),
+        isNull,
+        reason: 'empty store: the guard must not invent a conflict',
+      );
+    });
   });
 
   // ------------------------------------------------- pull cursors (B4)
@@ -1169,6 +1905,43 @@ void main() {
       );
       // A different table has its own cursor.
       expect((await db.getPullCursor('store-1', 'orders')).isEmpty, isTrue);
+    });
+    test('resetPullCursors clears ONLY the pull_cursor keys', () async {
+      await seedStore();
+      await db.setPullCursor(
+        'store-1',
+        'orders',
+        cursorAt(DateTime.utc(2026, 2, 1), 'server_created_at'),
+      );
+      await db.setPullCursor(
+        'store-1',
+        'products',
+        cursorAt(DateTime.utc(2026, 2, 1), 'server_updated_at'),
+      );
+      await db.setLocalSetting('store-1', 'shop-name', 'STAR:DOM');
+
+      await db.resetPullCursors('store-1');
+
+      expect(
+        (await db.getPullCursor('store-1', 'orders')).isEmpty,
+        isTrue,
+        reason:
+            'a re-pull must not be blocked by a high-water mark from '
+            'before the server data was rebuilt',
+      );
+      expect((await db.getPullCursor('store-1', 'products')).isEmpty, isTrue);
+      // Real store settings are untouched.
+      expect((await db.getSetting('store-1', 'shop-name'))?.value, 'STAR:DOM');
+    });
+    test('resetPullCursors does not touch another store', () async {
+      await seedStore('store-2');
+      await db.setPullCursor(
+        'store-2',
+        'orders',
+        cursorAt(DateTime.utc(2026, 2, 1), 'server_created_at'),
+      );
+      await db.resetPullCursors('store-1');
+      expect((await db.getPullCursor('store-2', 'orders')).isEmpty, isFalse);
     });
   });
 
@@ -1318,7 +2091,7 @@ void main() {
 
       final dump = await db.exportAll();
 
-      expect(dump['schema_version'], 3);
+      expect(dump['schema_version'], 4);
       expect((dump['stores'] as List).length, 1);
       expect((dump['devices'] as List).length, 1);
       expect((dump['products'] as List).length, 1);
@@ -1370,5 +2143,211 @@ void main() {
         expect(order.id, isNotEmpty);
       },
     );
+  });
+
+  // -------------------------------------------------- photo-less shelf rule
+  //
+  // Sell used to hide photo-less products at render time while Products
+  // still called them Active — ~4 in 10 items looked missing on one screen
+  // and fine on the other. They are now switched OFF once at launch, so
+  // `isActive` is the only rule both screens read.
+
+  group('photo-less products are deactivated once', () {
+    test(
+      'the sweep switches off live unphotoed rows only, and never again',
+      () async {
+        await seedStore();
+        final at = DateTime.utc(2026, 1, 1);
+        await db
+            .into(db.products)
+            .insert(
+              ProductsCompanion.insert(
+                id: 'p-photo',
+                storeId: 'store-1',
+                name: 'With photo',
+                price: 10,
+                imagePath: const Value('assets/x.webp'),
+                updatedAt: at,
+              ),
+            );
+        await db
+            .into(db.products)
+            .insert(
+              ProductsCompanion.insert(
+                id: 'p-bare',
+                storeId: 'store-1',
+                name: 'No photo yet',
+                price: 20,
+                updatedAt: at,
+              ),
+            );
+        await db
+            .into(db.products)
+            .insert(
+              ProductsCompanion.insert(
+                id: 'p-off',
+                storeId: 'store-1',
+                name: 'Turned off by hand',
+                price: 30,
+                isActive: const Value(false),
+                updatedAt: at,
+              ),
+            );
+
+        final swept = await db.deactivatePhotolessProducts('store-1');
+        expect(
+          swept,
+          1,
+          reason: 'only the LIVE photo-less row is switched off',
+        );
+        expect((await db.productById('p-photo'))!.isActive, isTrue);
+        expect((await db.productById('p-bare'))!.isActive, isFalse);
+        expect((await db.productById('p-off'))!.isActive, isFalse);
+
+        // The owner turns it back on: the sweep must stay out of the way.
+        await (db.update(db.products)..where((t) => t.id.equals('p-bare')))
+            .write(const ProductsCompanion(isActive: Value(true)));
+        expect(
+          await db.deactivatePhotolessProducts('store-1'),
+          0,
+          reason: 'one-shot: it must never re-hide what the owner enabled',
+        );
+        expect((await db.productById('p-bare'))!.isActive, isTrue);
+
+        expect(
+          await db.getSetting('store-1', 'photoless_products_swept'),
+          isNotNull,
+        );
+      },
+    );
+  });
+
+  // ------------------------------------------------ scan-to-add + top sellers
+
+  group('productByBarcode — the scan-to-add lookup', () {
+    test('exact match on a live row; deleted and unknown codes miss', () async {
+      await seedStore();
+      await seedProduct('p1', name: 'Art Print');
+      await db.into(db.products).insert(
+        ProductsCompanion.insert(
+          id: 'p-scan',
+          storeId: 'store-1',
+          name: 'Mug',
+          price: 390,
+          barcode: const Value('4800000000017'),
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      await db.into(db.products).insert(
+        ProductsCompanion.insert(
+          id: 'p-gone',
+          storeId: 'store-1',
+          name: 'Retired',
+          price: 10,
+          barcode: const Value('4800000000024'),
+          deletedAt: Value(DateTime.utc(2026, 1, 2)),
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+
+      expect((await db.productByBarcode('store-1', '4800000000017'))?.id,
+          'p-scan');
+      // A scanner's trailing whitespace must not defeat the match.
+      expect((await db.productByBarcode('store-1', ' 4800000000017 '))?.id,
+          'p-scan');
+      expect(await db.productByBarcode('store-1', 'nope'), isNull);
+      expect(await db.productByBarcode('store-1', ''), isNull,
+          reason: 'an empty scan is nothing, not the first row');
+      expect(await db.productByBarcode('store-1', '4800000000024'), isNull,
+          reason: 'soft-deleted rows never enter a sale');
+    });
+
+    test('listProducts search also matches the barcode column', () async {
+      await seedStore();
+      await seedProduct('p1', name: 'Mug');
+      await (db.update(db.products)..where((t) => t.id.equals('p1'))).write(
+        const ProductsCompanion(barcode: Value('SKU-99')), 
+      );
+      await seedProduct('p2', name: 'Candle');
+
+      final byName = await db.listProducts('store-1', search: 'Mug');
+      expect(byName.map((p) => p.id), ['p1']);
+      final byCode = await db.listProducts('store-1', search: 'SKU-99');
+      expect(byCode.map((p) => p.id), ['p1']);
+      final miss = await db.listProducts('store-1', search: 'zzz');
+      expect(miss, isEmpty);
+    });
+  });
+
+  group('topSellers — the Sell screen quick-add row', () {
+    test('units desc; voided orders and unsellable rows dropped', () async {
+      await seedStore();
+      await seedDevice();
+      await seedCashMethod();
+      await seedProduct('p1', name: 'Art Print');
+      await seedProduct('p2', name: 'Mug');
+      await seedProduct('p3', name: 'Keychain');
+      // Shelf says gone — a quick-add chip must never offer it.
+      await db.into(db.products).insert(
+        ProductsCompanion.insert(
+          id: 'p4',
+          storeId: 'store-1',
+          name: 'Candle',
+          price: 250,
+          stockStatus: const Value('Out of Stock'),
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+
+      await db.createOrder(
+        storeId: 'store-1',
+        deviceId: 'device-1',
+        subtotal: 1000,
+        discount: 0,
+        total: 1000,
+        paymentMethodId: 'pm-cash',
+        items: [
+          ...oneItem('p1', qty: 5, name: 'Art Print'),
+          ...oneItem('p2', qty: 2, name: 'Mug'),
+          ...oneItem('p4', qty: 4, name: 'Candle'),
+        ],
+      );
+      final voided = await db.createOrder(
+        storeId: 'store-1',
+        deviceId: 'device-1',
+        subtotal: 900,
+        discount: 0,
+        total: 900,
+        paymentMethodId: 'pm-cash',
+        items: oneItem('p3', qty: 9, name: 'Keychain'),
+      );
+      await db.voidOrder(
+        voided.id,
+        reason: 'oops',
+        deviceId: 'device-1',
+        storeId: 'store-1',
+      );
+
+      final top = await db.topSellers(
+        'store-1',
+        start: DateTime.utc(2026, 1, 15),
+        end: DateTime.utc(2026, 1, 16),
+      );
+      expect(
+        top.map((e) => e.$1.id).toList(),
+        ['p1', 'p2'],
+        reason: 'most units first; voided p3 (9 units) and sold-out p4 gone',
+      );
+      expect(top.first.$2, 5);
+      expect(top[1].$2, 2);
+
+      // Outside the day window there is nothing to quick-add.
+      final empty = await db.topSellers(
+        'store-1',
+        start: DateTime.utc(2026, 1, 16),
+        end: DateTime.utc(2026, 1, 17),
+      );
+      expect(empty, isEmpty);
+    });
   });
 }

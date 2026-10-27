@@ -55,6 +55,7 @@ class AppColors {
   static const infoText = Color(0xFF1E3A8A);
   static const infoBorder = Color(0xFFBFDBFE);
   static const kpiIconBg = Color(0xFFFFE0DE);
+  static const switchInk = Color(0xFF4A5568);
 }
 
 class AppRadius {
@@ -98,9 +99,32 @@ class AppShadows {
     blurRadius: 0,
     offset: Offset(2, 2),
   );
+  // Active nav (design §2.7): the yellow pill, its gold border and the
+  // brutalist hard offset behind it.
+  static const navPillGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    stops: [0.0, 0.4, 1.0],
+    colors: [Color(0xFFFFF3B8), Color(0xFFFFE37A), AppColors.yellow],
+  );
+  static const navPillBorder = Color(0xFFD89F00);
+  static const navPillShadow = BoxShadow(
+    color: Color(0xF2231B00), // rgba(35,27,0,.95)
+    blurRadius: 0,
+    offset: Offset(2, 3),
+  );
+
   static const focusRing = [
     BoxShadow(color: Color(0xFFFFFFFF), blurRadius: 0, spreadRadius: 2),
     BoxShadow(color: AppColors.yellow, blurRadius: 0, spreadRadius: 4),
     BoxShadow(color: Color(0x59FED01B), blurRadius: 0, spreadRadius: 6),
+  ];
+
+  /// Spec §3 `focus-visible: 2px solid --primary, offset 2px` — expressed as
+  /// shadows because a Flutter button cannot draw an outlined ring: a 2 px
+  /// gap over the button, then a 2 px crimson ring on top of it.
+  static const focusVisibleRing = [
+    BoxShadow(color: Color(0xFFFFFFFF), blurRadius: 0, spreadRadius: 2),
+    BoxShadow(color: AppColors.primary, blurRadius: 0, spreadRadius: 4),
   ];
 }

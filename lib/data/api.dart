@@ -31,9 +31,18 @@ class Api {
     _client = Supabase.instance.client;
   }
 
-  /// Push one entity row. Idempotent: every append-only table inserts with
-  /// `ON CONFLICT (id) DO NOTHING` (`ignoreDuplicates`), so replaying a row or
-  /// a whole bundle never duplicates data.
+  /// Push one entity row. Two conflict rules, split by whether the table's
+  /// rows are immutable:
+  ///
+  ///   * APPEND-ONCE (orders, order_items, payments, order_voids,
+  ///     stock_events): `ignoreDuplicates` — ON CONFLICT DO NOTHING, so
+  ///     replaying a row or a whole bundle never duplicates data.
+  ///   * MERGE (the LWW tables of 001 + day_closes): DO UPDATE. DO NOTHING
+  ///     here silently dropped every edit made AFTER the row was first
+  ///     pulled: a price change, an is_active toggle or the bundle_rules JSON
+  ///     would report ok and never reach the server, and a site-data clear
+  ///     would resurrect the old values. The server's lww_guard() decides
+  ///     whether the merge actually lands (stale writes are refused there).
   Future<void> pushRow(String table, Map<String, dynamic> row) async {
     switch (table) {
       case SaleBundle.entity:
@@ -41,9 +50,38 @@ class Api {
       case VoidBundle.entity:
         return pushVoid(row);
       default:
-        await _c.from(table).upsert(row, ignoreDuplicates: true);
+        if (table == 'stores') {
+          // RLS on stores checks the PROPOSED row of the upsert: PostgreSQL
+          // evaluates the INSERT policy's WITH CHECK before it resolves the
+          // conflict, and this payload deliberately omits owner_id — so the
+          // proposal carries owner_id = NULL and the server rejects the whole
+          // write with "new row violates row-level security policy for table
+          // stores" (reproduced server-side, 2026-10-25). Stamping the
+          // session's own uid makes the check pass; the policy itself still
+          // pins owner_id = auth.uid(), so a client can only ever claim its
+          // own ownership — never write someone else's.
+          final uid = _c.auth.currentUser?.id;
+          if (uid != null) row['owner_id'] = uid;
+        }
+        if (_mergeOnConflict.contains(table)) {
+          await _c.from(table).upsert(row);
+        } else {
+          await _c.from(table).upsert(row, ignoreDuplicates: true);
+        }
     }
   }
+
+  /// Tables whose push must UPDATE an existing row (LWW-guarded server-side).
+  /// Everything else pushes insert-if-absent.
+  static const Set<String> _mergeOnConflict = {
+    'stores',
+    'devices',
+    'categories',
+    'products',
+    'payment_methods',
+    'settings',
+    'day_closes',
+  };
 
   /// A sale reaches the server as ONE bundle: order + items + payment + stock
   /// events, written PARENTS FIRST (B6). Each table insert is
@@ -82,8 +120,16 @@ class Api {
     }
     final res = await q
         .order(col, ascending: true)
-        .order('id', ascending: true)
+        .order(table == 'settings' ? 'key' : 'id', ascending: true)
         .limit(limit);
+    return (res as List).cast<Map<String, dynamic>>();
+  }
+
+  /// The store's device rows as the server keeps them, for the
+  /// claim-after-site-data-clear flow: the booth re-attaches to its old row
+  /// instead of registering a lookalike. RLS keeps this owner-scoped.
+  Future<List<Map<String, dynamic>>> listDevices(String storeId) async {
+    final res = await _c.from('devices').select().eq('store_id', storeId);
     return (res as List).cast<Map<String, dynamic>>();
   }
 
@@ -139,6 +185,33 @@ class Api {
       return PushResult.offline;
     }
     return PushResult.failed;
+  }
+
+  /// The server's own words for a rejected write — what actually lands in the
+  /// outbox's last_error and (through SyncEngine) in the snackbar. Without
+  /// this, a refusal is only ever "attempt 2 failed", and the owner cannot
+  /// tell an RLS rejection from a stale session from a conflict.
+  ///
+  /// Transport shapes carry no server opinion and return null; the head line
+  /// of an unknown failure shape is kept so Sync details is never silent.
+  /// Truncated: this string is shown whole in a snack bar.
+  static String? describeError(Object error) {
+    const maxLen = 180;
+    String clip(String s) =>
+        s.length > maxLen ? '${s.substring(0, maxLen - 1)}…' : s;
+    if (error is PostgrestException) {
+      final code = int.tryParse(error.code ?? '');
+      if (code == null || code < 400) return null;
+      final msg = error.message.trim();
+      final details = error.details?.toString().trim() ?? '';
+      final body = details.isNotEmpty && details != msg
+          ? '$msg — $details'
+          : msg;
+      return clip(
+        body.isEmpty ? 'HTTP $code: server rejected the write' : 'HTTP $code: $body',
+      );
+    }
+    return clip('${error.runtimeType}: $error');
   }
 
   /// True when the SDK already has a session that can still be refreshed.

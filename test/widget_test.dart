@@ -1,9 +1,11 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stardom_pos/core/icons.dart';
 import 'package:stardom_pos/data/db.dart';
 import 'package:stardom_pos/data/db_open.dart';
 import 'package:stardom_pos/main.dart';
+import 'package:stardom_pos/ui/settings.dart';
 
 /// The shell boots against an in-memory database, so these tests exercise the
 /// real boot sequence (open → storage mode → seeded or unseeded store) rather
@@ -25,7 +27,9 @@ void main() {
         storagePersisted: false,
       ),
     );
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
   }
 
   /// Dispose the tree so the 10s status ticker is cancelled before the test
@@ -36,18 +40,18 @@ void main() {
     await db.close();
   }
 
-  testWidgets('shell boots and reports the unseeded state', (tester) async {
+  testWidgets('shell boots and auto-seeds the catalogue store', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     await pumpShell(tester, db, storageMode: 'unsafeIndexedDb');
 
-    expect(find.text('STAR:DOM POS'), findsOneWidget);
-    // No store row → the runbook notice, not a crash or a blank screen.
-    expect(find.textContaining('No store yet'), findsOneWidget);
+    // The catalogue is auto-seeded into the empty database on boot.
+    expect(find.byType(PosNavBar), findsOneWidget);
+    expect(find.byIcon(AppIcons.sell), findsOneWidget);
 
     await disposeShell(tester, db);
   });
 
-  testWidgets('shell reports the storage backend and the outbox state', (
+  testWidgets('seeded store lands on Sell and Settings reports the device', (
     tester,
   ) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -70,12 +74,40 @@ void main() {
 
     await pumpShell(tester, db, storageMode: 'unsafeIndexedDb');
 
-    // W2: the mode WebKit actually picked is on screen, not assumed.
+    // The five tabs are there and Sell is the landing tab.
+    expect(find.byType(PosNavBar), findsOneWidget);
+    expect(find.byIcon(AppIcons.sell), findsOneWidget);
+    expect(find.text('No products yet'), findsOneWidget);
+    // No stale sales → the data-loss banner stays away.
+    expect(find.textContaining('Unsynced sales'), findsNothing);
+
+    // W2: the storage mode WebKit actually picked is on screen, in Settings.
+    await tester.tap(find.byIcon(AppIcons.settings));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Shop'), findsOneWidget);
+
+    // The device facts sit below the fold of the settings list.
+    final settingsScrollable = find
+        .descendant(
+          of: find.byType(SettingsScreen),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      find.textContaining('unsafeIndexedDb'),
+      300,
+      scrollable: settingsScrollable,
+    );
     expect(find.textContaining('unsafeIndexedDb'), findsOneWidget);
     expect(find.textContaining('data survives reloads'), findsOneWidget);
-    // The outbox guard is present (zero pending, so no banner).
-    expect(find.text('Pending sales'), findsOneWidget);
-    expect(find.textContaining('Unsynced sales'), findsNothing);
+
+    await tester.scrollUntilVisible(
+      find.text('Sync details'),
+      300,
+      scrollable: settingsScrollable,
+    );
+    expect(find.text('Sync details'), findsOneWidget);
 
     await disposeShell(tester, db);
   });

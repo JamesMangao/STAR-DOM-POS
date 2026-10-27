@@ -13,7 +13,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 
-const { hasGlyph, PESO } = require('./font-check');
+const { hasGlyph, hasTabularFigures, PESO } = require('./font-check');
 
 const ROOT = path.resolve(__dirname, '..');
 const SORA = path.join(ROOT, 'assets', 'fonts', 'Sora.ttf');
@@ -64,4 +64,36 @@ test('the receipt PDF is set in the font that has ₱', () => {
 test('no peso figure is hard-coded through a font that lacks it (grep of format.dart)', () => {
   const fmt = fs.readFileSync(path.join(ROOT, 'lib', 'core', 'format.dart'), 'utf8');
   assert.match(fmt, /₱/, 'Fmt.peso is the single peso formatter');
+});
+
+test('every bundled font declares the tnum (tabular figures) feature', () => {
+  // Design §1.2: prices are tabular-nums. FontFeature.tabularFigures() on a
+  // font without `tnum` is silently ignored and the peso column jitters, so
+  // the feature must actually exist in each bundled font.
+  const fonts = [SORA, JAKARTA].filter((f) => fs.existsSync(f));
+  assert.ok(fonts.length > 0, 'at least one bundled font is required');
+  for (const f of fonts) {
+    assert.ok(
+      hasTabularFigures(f),
+      `${path.basename(f)} must declare 'tnum' — prices would jitter without it`,
+    );
+  }
+});
+
+test('the money styles actually request tabular figures', () => {
+  const widgets = fs.readFileSync(
+    path.join(ROOT, 'lib', 'ui', 'widgets.dart'),
+    'utf8',
+  );
+  assert.match(
+    widgets,
+    /fontFeatures:\s*const \[FontFeature\.tabularFigures\(\)\]/,
+    'sora()/mono() must carry FontFeature.tabularFigures()',
+  );
+  const theme = fs.readFileSync(path.join(ROOT, 'lib', 'core', 'theme.dart'), 'utf8');
+  assert.match(
+    theme,
+    /fontFeatures:\s*const \[FontFeature\.tabularFigures\(\)\]/,
+    'the theme\'s Sora styles must carry FontFeature.tabularFigures()',
+  );
 });

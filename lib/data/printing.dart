@@ -93,8 +93,10 @@ const double receiptWidthPt = 80 * PdfPageFormat.mm;
 Future<Uint8List> buildReceiptPdf(Receipt r) async {
   final font = await _receiptFont();
   final bold = font;
+  final logo = await _receiptLogo();
 
-  final height = (170 + r.lines.length * 12.5 + 150)
+  // +28: the brand wordmark at the head of the paper (22 pt + 6 pt gap).
+  final height = (198 + r.lines.length * 12.5 + 150)
       .clamp(320, 2000)
       .toDouble();
   final doc = pw.Document();
@@ -105,6 +107,20 @@ Future<Uint8List> buildReceiptPdf(Receipt r) async {
       build: (ctx) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
+          // The brand, first thing on the paper. A missing asset drops the
+          // logo and prints the receipt — a print must never fail.
+          if (logo != null)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 6),
+              child: pw.Center(
+                child: pw.Image(
+                  pw.MemoryImage(logo),
+                  width: 94,
+                  height: 22,
+                  fit: pw.BoxFit.contain,
+                ),
+              ),
+            ),
           pw.Text(
             r.receiptName.isEmpty ? r.storeName : r.receiptName,
             textAlign: pw.TextAlign.center,
@@ -219,6 +235,19 @@ Future<Uint8List> buildReceiptPdf(Receipt r) async {
     ),
   );
   return doc.save();
+}
+
+/// The same wordmark the screen shows, embedded as PNG (a PDF can only
+/// place PNG/JPEG — which is why the PDF embeds the PNG copy of the logo
+/// (android-chrome-512x512.png is the same ST⭐R:Dom mark).
+/// `null` when the asset is ever missing: the receipt prints without it.
+Future<Uint8List?> _receiptLogo() async {
+  try {
+    final data = await rootBundle.load('assets/android-chrome-512x512.png');
+    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+  } catch (_) {
+    return null;
+  }
 }
 
 /// The bundled font that actually carries ₱ (U+20B1) — Sora does not, so the

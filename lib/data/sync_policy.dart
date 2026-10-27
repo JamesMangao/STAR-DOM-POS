@@ -1,5 +1,6 @@
-/// Pure sync policy: backoff, error classification, push/pull order and the
-/// pull cursor. No Flutter, no DB, no network — so every rule here is unit
+/// Pure sync policy: backoff, error classification, push/pull order, the
+/// pull cursor and the plain-language report of a queue that was skipped.
+/// No Flutter, no DB, no network — so every rule here is unit
 /// tested (B4, B5, B6) and the engine in sync.dart can only obey it.
 library;
 
@@ -109,6 +110,26 @@ class PushPolicy {
           lastError: 'attempt $attempts failed',
         );
     }
+  }
+
+  /// The sentence shown when a sync run ended with rows still queued but
+  /// pushed NOTHING: every queued row was skipped — parked after
+  /// [maxAttempts] real failures, or still inside a backoff window (both
+  /// fail [shouldAttempt]). Null when there is nothing queued to explain.
+  ///
+  /// This is the engine's last line of defence: a run that could not get
+  /// its rows out must never leave the UI guessing "what failed?".
+  static String? explainSkipped(Iterable<OutboxState> rows) {
+    final list = rows.toList(growable: false);
+    if (list.isEmpty) return null;
+    final parked = list.where((s) => s.parked).length;
+    if (parked > 0) {
+      return '$parked queued ${parked == 1 ? 'sale was' : 'sales were'} '
+          'rejected by the server $maxAttempts times and stopped retrying — '
+          'open Settings → Sync details and tap Retry.';
+    }
+    return 'The server rejected a recent attempt — the app retries '
+        'automatically, or open Settings → Sync details to retry now.';
   }
 }
 

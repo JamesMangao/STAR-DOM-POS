@@ -11,7 +11,7 @@ insert into stores (
   receipt_accreditation, receipt_footer, currency
 ) values (
   '11111111-1111-4111-8111-111111111111',
-  'STAR:DOM Artisan & Pop-up Hub',
+  'ST⭐️R:Dom x ka1ofakind',
   'Fast. Simple. Offline. Built for Filipino Small Businesses.',
   'STAR:DOM Artisan Marketplace & Pop-up Tour',
   '000-000-000-000',

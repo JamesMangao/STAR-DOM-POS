@@ -45,4 +45,15 @@ class AppIcons {
   static const wallet = Symbols.account_balance_wallet;
   static const bank = Symbols.account_balance;
   static const device = Symbols.devices;
+  static const backspace = Symbols.backspace;
+  static const image = Symbols.image;
+  static const delete = Symbols.delete;
+  static const logout = Symbols.logout;
+  static const category = Symbols.category;
+  static const camera = Symbols.photo_camera;
+  static const pictureAsPdf = Symbols.picture_as_pdf;
+  static const copy = Symbols.content_copy;
+  static const key = Symbols.key;
+  static const shield = Symbols.shield;
+  static const tableView = Symbols.table_view;
 }

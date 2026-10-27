@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'theme.dart';
 import 'tokens.dart';
 
+/// Dev-only token gallery — view design tokens on device. Not part of the
+/// production navigation; reach it from Settings → View Tokens.
 class Gallery extends StatelessWidget {
   const Gallery({super.key});
 
   @override
   Widget build(BuildContext ctx) {
-    final padding = AppSpacing.screen;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Token Gallery'),
@@ -16,7 +16,7 @@ class Gallery extends StatelessWidget {
         foregroundColor: AppColors.ink,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(padding),
+        padding: const EdgeInsets.all(AppSpacing.screen),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -33,41 +33,17 @@ class Gallery extends StatelessWidget {
               _swatch(AppColors.tertiaryFixed, 'tertiary-fixed'),
               _swatch(AppColors.outline, 'outline'),
             ]),
-            _section('Elevations & Stamp', [
-              _textTile('sh1', AppShadows.sh1.map((s) => s).join('; ')),
-              _textTile('sh2', AppShadows.sh2.map((s) => s).join('; ')),
-              _textTile('stamp', '2px 2px 0 var(--ink)'),
-              _textTile(
-                'focus-ring',
-                AppShadows.focusRing.map((s) => s).join('; '),
-              ),
-            ]),
             _section('Radii', [
-              _swatchRadius(AppRadius.s, 'r-s'),
-              _swatchRadius(AppRadius.m, 'r-m'),
-              _swatchRadius(AppRadius.l, 'r-l'),
-              _swatchRadius(AppRadius.xl, 'r-xl'),
-              _swatchRadius(AppRadius.pill, 'pill'),
+              _radiusTile(AppRadius.s, 'r-s'),
+              _radiusTile(AppRadius.m, 'r-m'),
+              _radiusTile(AppRadius.l, 'r-l'),
+              _radiusTile(AppRadius.xl, 'r-xl'),
+              _radiusTile(AppRadius.pill, 'pill'),
             ]),
             _section('Spacing', [
-              _textTile('padding', AppSpacing.screen.toString()),
-              _textTile('bottom-nav', AppSpacing.bottomNav.toString()),
-              _textTile('tap-target', AppSpacing.tapTarget.toString()),
-            ]),
-            _section('Text & Typography', [
-              _textTile(
-                'display-large',
-                AppTheme.light().textTheme.displayLarge.toString(),
-              ),
-              _textTile(
-                'body-large',
-                AppTheme.light().textTheme.bodyLarge.toString(),
-              ),
-            ]),
-            _section('Border & Ink', [
-              _textTile('card', 'rgba(255,255,255,1), 1px ${AppColors.line})'),
-              _swatch(AppColors.primary, 'button-primary'),
-              _swatch(AppColors.yellow, 'button-secondary'),
+              _textTile('screen', '${AppSpacing.screen}'),
+              _textTile('bottom-nav', '${AppSpacing.bottomNav}'),
+              _textTile('tap-target', '${AppSpacing.tapTarget}'),
             ]),
           ],
         ),
@@ -76,48 +52,97 @@ class Gallery extends StatelessWidget {
   }
 
   Widget _section(String title, List<Widget> children) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.md),
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontFamily: 'Sora',
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontFamily: 'Sora',
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
             ),
           ),
-        ),
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(AppRadius.l),
-            border: Border.all(color: AppColors.line, width: 1),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppRadius.l),
+              border: Border.all(color: AppColors.line),
+            ),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
           ),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: children,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _swatch(Color c, String name) {
-    return _textTile(
-      name,
-      'Container(width: 100, height: 30, color: Color(${c.toARGB32()}), margin: const EdgeInsets.all(2))',
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 24,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: AppColors.line),
+            ),
+          ),
+          Text(name, style: const TextStyle(fontFamily: 'Sora', fontSize: 13)),
+          const SizedBox(width: 8),
+          Text(
+            '#${c.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()}',
+            style: const TextStyle(
+              fontFamily: 'PlusJakartaSans',
+              fontSize: 11,
+              color: AppColors.inkSoft,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _swatchRadius(num radius, String name) {
-    return _textTile(
-      name,
-      'Container(width: 100, height: 30, borderRadius: BorderRadius.all(Radius.circular($radius)), color: Colors.white)',
+  Widget _radiusTile(double radius, String name) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 28,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMid,
+              borderRadius: BorderRadius.circular(radius.clamp(0, 14)),
+              border: Border.all(color: AppColors.line),
+            ),
+          ),
+          Text(name, style: const TextStyle(fontFamily: 'Sora', fontSize: 13)),
+          const SizedBox(width: 8),
+          Text(
+            '${radius}px',
+            style: const TextStyle(
+              fontFamily: 'PlusJakartaSans',
+              fontSize: 11,
+              color: AppColors.inkSoft,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -137,8 +162,12 @@ class Gallery extends StatelessWidget {
             ),
           ),
           Text(
-            '→ $desc',
-            style: const TextStyle(fontFamily: 'PlusJakartaSans', fontSize: 11),
+            desc,
+            style: const TextStyle(
+              fontFamily: 'PlusJakartaSans',
+              fontSize: 11,
+              color: AppColors.inkSoft,
+            ),
           ),
         ],
       ),

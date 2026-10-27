@@ -54,12 +54,16 @@ class OwnerAuth {
     if (!_controller.isClosed) _controller.add(_signedIn);
   }
 
+  String? _lastError;
+  String? get lastError => _lastError;
+
   /// The first-run (or expired-session) sign-in. Returns a plain verdict; the
-  /// UI shows a generic message and never echoes the server's error text.
+  /// UI shows a friendly message with helpful error details when available.
   Future<SignInOutcome> signIn({
     required String email,
     required String password,
   }) async {
+    _lastError = null;
     if (!Api.instance.isReady) return SignInOutcome.notConfigured;
     if (email.trim().isEmpty || password.isEmpty) {
       return SignInOutcome.invalidInput;
@@ -71,10 +75,12 @@ class OwnerAuth {
       );
       _apply(res.session);
       return _signedIn ? SignInOutcome.ok : SignInOutcome.rejected;
-    } on AuthException {
+    } on AuthException catch (e) {
+      _lastError = e.message;
       await Future<void>.delayed(attemptDelay);
       return SignInOutcome.rejected;
-    } catch (_) {
+    } catch (e) {
+      _lastError = e.toString();
       await Future<void>.delayed(attemptDelay);
       // A transport failure is not a wrong password — say "offline", not
       // "rejected", so nobody retypes a correct password forever.
@@ -106,4 +112,11 @@ enum SignInOutcome {
     invalidInput => 'Enter the owner email and password.',
     notConfigured => 'This build has no Supabase URL/key (check dart-defines).',
   };
+
+  String messageWithDetail([String? detail]) {
+    if (this == SignInOutcome.rejected && detail != null && detail.isNotEmpty) {
+      return 'Sign-in failed: $detail';
+    }
+    return message;
+  }
 }

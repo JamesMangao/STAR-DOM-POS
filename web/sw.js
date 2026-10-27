@@ -62,11 +62,37 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return; // Supabase etc.: untouched
   if (NEVER_CACHE.some((re) => re.test(url.pathname))) return;
   if (url.pathname.endsWith('/sw.js') || url.pathname.endsWith('/build-manifest.json')) return; // always network
+  // HARD RULE: this handler must NEVER reject. A rejected respondWith
+  // surfaces as net::ERR_FAILED for the whole page ("This site can't be
+  // reached") and ONLY a hard refresh — which bypasses the worker — gets
+  // past it. The Cache API itself can throw: storage quota pressure (this
+  // build precaches ~50 MB) or a corrupt cache entry. Every path below
+  // therefore falls back to the network, and only then to a 504.
   event.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-    const hit = await cache.match(req.mode === 'navigate' ? 'index.html' : req, { ignoreSearch: true });
-    if (hit) return hit;
-    MISSES.push(url.pathname); // a miss = a file missing from build-manifest.json
-    try { return await fetch(req); } catch (e) { return new Response('', { status: 504 }); }
+    try {
+      const cache = await caches.open(CACHE);
+      const hit = await cache.match(req.mode === 'navigate' ? 'index.html' : req, { ignoreSearch: true });
+      if (hit) return hit;
+      MISSES.push(url.pathname); // a miss = a file missing from build-manifest.json
+      try {
+        return await fetch(req);
+      } catch (e) {
+        // Offline navigation: hand back the shell instead of an empty page.
+        if (req.mode === 'navigate') {
+          try {
+            const shell = await cache.match('index.html', { ignoreSearch: true });
+            if (shell) return shell;
+          } catch (_) { /* fall through */ }
+        }
+        return new Response('', { status: 504, statusText: 'Offline' });
+      }
+    } catch (e) {
+      // The cache layer broke (quota/corrupt) — the network usually still
+      // works, so serve the request directly rather than failing the page.
+      try {
+        return await fetch(req);
+      } catch (_) { /* fall through */ }
+      return new Response('', { status: 504, statusText: 'Offline' });
+    }
   })());
 });

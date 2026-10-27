@@ -84,6 +84,25 @@ class Products extends Table {
       integer().named('stock_quantity').withDefault(const Constant(0))();
   BoolColumn get isActive =>
       boolean().named('is_active').withDefault(const Constant(true))();
+
+  /// The shelf status the shop owner writes down by hand ("In Stock",
+  /// "Low Stock", "Restock", "Out of Stock"). It is NOT derivable from
+  /// [stockQuantity] — the source inventory says "Low Stock" at 10 units and
+  /// "In Stock" at 10 units on different rows — so it is stored, not guessed.
+  TextColumn get stockStatus =>
+      text().named('stock_status').withDefault(const Constant('In Stock'))();
+
+  /// The item id from the source inventory sheet (e.g. "#001"). Lets the owner
+  /// find a row in the PDF without searching by name.
+  TextColumn get sourceRef => text().named('source_ref').nullable()();
+
+  /// The free-text note from the source sheet ("RESTOCK", "9(otherdesign)").
+  TextColumn get notes => text().nullable()();
+
+  /// The unnamed "Column 1" of the source sheet. Its meaning is undefined
+  /// there, so it is carried verbatim and never interpreted.
+  IntColumn get sourceCol1 => integer().named('source_col1').nullable()();
+
   DateTimeColumn get createdAt =>
       dateTime().named('created_at').withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().named('updated_at')();

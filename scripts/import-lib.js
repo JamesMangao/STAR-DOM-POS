@@ -153,7 +153,7 @@ function paymentMethodsFromExport(settings, exportDir) {
 function storeRow(storeId, ownerId) {
   return {
     id: storeId,
-    name: 'STAR:DOM Artisan & Pop-up Hub',
+    name: 'ST⭐️R:Dom x ka1ofakind',
     tagline: 'Fast. Simple. Offline. Built for Filipino Small Businesses.',
     ownerId,
     receiptName: 'STAR:DOM Artisan Marketplace & Pop-up Tour',

@@ -152,6 +152,14 @@ function generateBuildManifest(buildDir) {
     if (relPath === 'sw.js' || relPath === 'build-manifest.json' || relPath.endsWith('.map')) {
       continue;
     }
+    // `_headers`, `_redirects`, `_routes.json` are Cloudflare Pages PLATFORM
+    // config, never app assets: Pages does not serve underscore-prefixed files
+    // (a request for /_headers falls back to index.html), so precaching them
+    // guarantees a hash mismatch — and a failed SW install that pins every
+    // client to the previous shell forever.
+    if (relPath.startsWith('_')) {
+      continue;
+    }
 
     const buf = fs.readFileSync(absPath);
     const hash = sha256(buf);

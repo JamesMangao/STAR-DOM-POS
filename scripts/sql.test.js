@@ -12,6 +12,7 @@ const assert = require('node:assert');
 const {
   createDb,
   applyMigrations,
+  migrationFiles,
   runReset,
   websiteFixture,
   posFixture,
@@ -175,8 +176,18 @@ test('stale update is ignored; newer update applies; server_* is set by the serv
   const db = await migrated();
   const id = IDS.productId;
 
+  // Anchor to the row's REAL updated_at (it defaults to now(), so a fixed
+  // calendar date would age into the past as the suite runs and turn every
+  // "ahead" write into a stale one the lww_guard then rejects). +1h is a fast
+  // clock, -1h is a stale one, +2h is a newer one.
+  const seed = await db.query(`select updated_at from products where id = $1`, [id]);
+  const base = rows(seed)[0].updated_at.getTime();
+  const ahead = new Date(base + 60 * 60 * 1000).toISOString();
+  const stale = new Date(base - 60 * 60 * 1000).toISOString();
+  const newer = new Date(base + 2 * 60 * 60 * 1000).toISOString();
+
   // Local clock far ahead of the stored row (a device with a fast clock).
-  await db.query(`update products set name = 'local fresh', updated_at = '2026-10-20T00:00:00Z' where id = $1`, [id]);
+  await db.query(`update products set name = 'local fresh', updated_at = '${ahead}' where id = $1`, [id]);
   const first = await db.query(
     `select name, updated_at, server_updated_at from products where id = $1`,
     [id],
@@ -185,7 +196,7 @@ test('stale update is ignored; newer update applies; server_* is set by the serv
 
   // A stale write (older updated_at) must change NOTHING.
   await db.query(
-    `update products set name = 'stale', updated_at = '2026-10-19T00:00:00Z' where id = $1`,
+    `update products set name = 'stale', updated_at = '${stale}' where id = $1`,
     [id],
   );
   const afterStale = await db.query(
@@ -200,7 +211,7 @@ test('stale update is ignored; newer update applies; server_* is set by the serv
 
   // A newer write applies and bumps the SERVER clock, not the client one.
   await db.query(
-    `update products set name = 'newer', updated_at = '2026-10-21T00:00:00Z' where id = $1`,
+    `update products set name = 'newer', updated_at = '${newer}' where id = $1`,
     [id],
   );
   const afterNewer = await db.query(
@@ -406,5 +417,195 @@ test('reset then migrations: the fixture becomes a clean POS database', async ()
       where table_schema='public' and table_type='BASE TABLE'`,
   );
   assert.equal(rows(t)[0].n, 13);
+  await db.close();
+});
+
+// ---------------------------------------------------------------- 006 dedupe
+// The live database carried six "Cash" methods, three "Tamaraw" products and
+// nine "Booth iPad" devices from re-seeds and re-registrations. Migration 006
+// merges what exists AND refuses what comes next — both halves are exercised
+// here against real Postgres (PGlite), never the live project.
+test('006: existing duplicates merge, references survive, FORCE RLS is back', async () => {
+  const db = await createDb();
+  // Everything EXCEPT 006, so the fixture can carry duplicates first.
+  for (const file of migrationFiles()) {
+    if (require('path').basename(file).startsWith('006')) continue;
+    await db.exec(require('fs').readFileSync(file, 'utf8'));
+  }
+  await posFixture(db, IDS);
+
+  const now = '2026-10-01T00:00:00Z';
+  await db.exec(`
+    -- case/spacing variants of the same shelf item
+    insert into products (id, store_id, name, price, created_at, updated_at) values
+      ('55555555-0000-4000-8000-000000000001', '${IDS.storeId}', 'phm', 30, '${now}', '${now}'),
+      ('55555555-0000-4000-8000-000000000002', '${IDS.storeId}', 'PHM ', 30, '${now}', '${now}');
+    -- the twin carries the only sale: it must be the survivor
+    insert into orders (id, store_id, device_id, order_no, total, created_at, updated_at) values
+      ('77777777-0000-4000-8000-000000000001', '${IDS.storeId}',
+       '88888888-0000-4000-8000-000000000001', 'A0-261001-001', 30, '${now}', '${now}');
+    insert into order_items (id, order_id, product_id, product_name, unit_price, quantity, line_total) values
+      ('99999999-0000-4000-8000-000000000001', '77777777-0000-4000-8000-000000000001',
+       '55555555-0000-4000-8000-000000000002', 'PHM', 30, 1, 30);
+    -- three Cash methods, one GCash
+    insert into payment_methods (id, store_id, name, type, created_at, updated_at) values
+      ('5a5a5a5a-0000-4000-8000-000000000001', '${IDS.storeId}', 'Cash', 'cash', '${now}', '${now}'),
+      ('5a5a5a5a-0000-4000-8000-000000000002', '${IDS.storeId}', 'cash', 'cash', '${now}', '${now}'),
+      ('5a5a5a5a-0000-4000-8000-000000000003', '${IDS.storeId}', 'CASH', 'cash', '${now}', '${now}'),
+      ('5a5a5a5a-0000-4000-8000-000000000004', '${IDS.storeId}', 'GCash', 'ewallet', '${now}', '${now}');
+    update orders set payment_method_id = '5a5a5a5a-0000-4000-8000-000000000002'
+      where id = '77777777-0000-4000-8000-000000000001';
+    -- two same-name devices; the order below records sales ON ...0002
+    insert into devices (id, store_id, device_name, device_code, created_at, updated_at) values
+      ('dddddddd-0000-4000-8000-000000000001', '${IDS.storeId}', 'Booth iPad', 'B0', '${now}', '${now}'),
+      ('dddddddd-0000-4000-8000-000000000002', '${IDS.storeId}', 'booth  ipad', 'B1', '${now}', '${now}');
+    update orders set device_id = 'dddddddd-0000-4000-8000-000000000002'
+      where id = '77777777-0000-4000-8000-000000000001';
+    -- stock history: the loser carries +5 -1, the survivor -1
+    insert into stock_events (id, store_id, product_id, delta, reason, device_id, created_at) values
+      ('5e5e5e5e-0000-4000-8000-000000000001', '${IDS.storeId}', '55555555-0000-4000-8000-000000000002', 5, 'import', 'dddddddd-0000-4000-8000-000000000002', '${now}'),
+      ('5e5e5e5e-0000-4000-8000-000000000002', '${IDS.storeId}', '55555555-0000-4000-8000-000000000002', -1, 'sale', 'dddddddd-0000-4000-8000-000000000002', '${now}'),
+      ('5e5e5e5e-0000-4000-8000-000000000003', '${IDS.storeId}', '55555555-0000-4000-8000-000000000001', -1, 'sale', 'dddddddd-0000-4000-8000-000000000001', '${now}');
+  `);
+
+  await db.exec(
+    require('fs').readFileSync(
+      require('path').resolve(__dirname, '..', 'supabase', 'migrations', '006_dedupe_uniqueness.sql'),
+      'utf8',
+    ),
+  );
+
+  const prods = await db.query(
+    `select id from products where store_id = $1 and deleted_at is null
+       and norm_name(name) = 'phm'`,
+    [IDS.storeId],
+  );
+  assert.equal(rows(prods).length, 1, 'two PHM variants must collapse to one row');
+  assert.equal(
+    rows(prods)[0].id,
+    '55555555-0000-4000-8000-000000000002',
+    'the row WITH sales history must survive',
+  );
+  const item = await db.query(`select product_id from order_items where id = $1`, [
+    '99999999-0000-4000-8000-000000000001',
+  ]);
+  assert.equal(rows(item)[0].product_id, '55555555-0000-4000-8000-000000000002',
+    'sale history must point at the survivor');
+  const mirror = await db.query(
+    `select stock_quantity from products where id = $1`,
+    ['55555555-0000-4000-8000-000000000002'],
+  );
+  assert.equal(
+    rows(mirror)[0].stock_quantity,
+    3,
+    'the survivor\u2019s stock mirror is recomputed from the events that moved',
+  );
+
+  const methods = await db.query(
+    `select id from payment_methods where store_id = $1 and deleted_at is null
+       and norm_name(name) = 'cash'`,
+    [IDS.storeId],
+  );
+  assert.equal(rows(methods).length, 1, 'three Cash variants must collapse to one');
+  assert.equal(rows(methods)[0].id, '5a5a5a5a-0000-4000-8000-000000000002',
+    'the Cash an order settled with must survive');
+  const o = await db.query(`select payment_method_id from orders where id = $1`, [
+    '77777777-0000-4000-8000-000000000001',
+  ]);
+  assert.equal(rows(o)[0].payment_method_id, '5a5a5a5a-0000-4000-8000-000000000002');
+
+  // Devices are identities: BOTH rows survive, only one is active, and the
+  // sale still belongs to the device whose code its order number carries.
+  const devs = await db.query(
+    `select id, is_active from devices where store_id = $1
+       and norm_name(device_name) = 'booth ipad' order by id`,
+    [IDS.storeId],
+  );
+  assert.deepEqual(
+    rows(devs).map((r) => [r.id, r.is_active]),
+    [
+      ['dddddddd-0000-4000-8000-000000000001', false],
+      ['dddddddd-0000-4000-8000-000000000002', true],
+    ],
+    'one active booth (the newest registration), the older row kept as history',
+  );
+  const oDev = await db.query(`select device_id from orders where id = $1`, [
+    '77777777-0000-4000-8000-000000000001',
+  ]);
+  assert.equal(
+    rows(oDev)[0].device_id,
+    'dddddddd-0000-4000-8000-000000000002',
+    'the sale must not be repointed to another registration',
+  );
+
+  // RLS was lifted for the merge and must be back where 003 left it.
+  for (const t of ['products', 'order_items', 'devices']) {
+    const r = await db.query(
+      `select c.relrowsecurity, c.relforcerowsecurity
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relname = $1`,
+      [t],
+    );
+    assert.equal(rows(r)[0].relforcerowsecurity, true, `${t} must be FORCEd again`);
+  }
+
+  // And the migration is idempotent: a second run changes nothing.
+  const before = await db.query(`select count(*)::int n from products`);
+  await db.exec(
+    require('fs').readFileSync(
+      require('path').resolve(__dirname, '..', 'supabase', 'migrations', '006_dedupe_uniqueness.sql'),
+      'utf8',
+    ),
+  );
+  const after = await db.query(`select count(*)::int n from products`);
+  assert.equal(rows(after)[0].n, rows(before)[0].n, 'a re-run must be a no-op');
+  await db.close();
+});
+
+test('006: the server REFUSES a duplicate name — old client builds included', async () => {
+  const db = await migrated();
+
+  // Case + spacing variant of the existing 'Owner product'.
+  await assert.rejects(
+    () =>
+      db.query(
+        `insert into products (id, store_id, name, price, created_at, updated_at)
+         values ('55555555-0000-4000-8000-0000000000ff', $1, ' owner   PRODUCT ', 30, now(), now())`,
+        [IDS.storeId],
+      ),
+    /duplicate key|unique constraint/i,
+    'a normalised duplicate product insert must be refused by the database',
+  );
+
+  await db.query(
+    `insert into payment_methods (id, store_id, name, type, created_at, updated_at)
+     values ('5a5a5a5a-0000-4000-8000-00000000000a', $1, 'GCash', 'ewallet', now(), now())`,
+    [IDS.storeId],
+  );
+  await assert.rejects(
+    () =>
+      db.query(
+        `insert into payment_methods (id, store_id, name, type, created_at, updated_at)
+         values ('5a5a5a5a-0000-4000-8000-0000000000ff', $1, ' GCASH ', 'ewallet', now(), now())`,
+        [IDS.storeId],
+      ),
+    /duplicate key|unique constraint/i,
+    'a normalised duplicate payment method must be refused',
+  );
+
+  // A TOMBSTONE does not hold the name: the app soft-deletes, and the next
+  // live row with that name must be accepted.
+  await db.query(`update products set deleted_at = now() where id = $1`, [IDS.productId]);
+  await db.query(
+    `insert into products (id, store_id, name, price, created_at, updated_at)
+     values ('55555555-0000-4000-8000-0000000000fe', $1, 'owner product', 30, now(), now())`,
+    [IDS.storeId],
+  );
+  const n = await db.query(
+    `select count(*)::int n from products
+      where store_id = $1 and deleted_at is null`,
+    [IDS.storeId],
+  );
+  assert.equal(rows(n)[0].n, 1, 'the re-created live row must be the only live one');
   await db.close();
 });
