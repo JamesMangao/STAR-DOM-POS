@@ -47,17 +47,19 @@ Future<void> main() async {
   // restart without anyone touching anything. See `data/local_backup.dart`.
   await LocalBackup.restore(opened.db);
 
-  // W2: ask for persistent storage BEFORE anything is sold, and remember the
-  // answer. WebKit evicts non-persistent origins under memory pressure, and
-  // every unsynced sale would go with it.
-  final persisted = await web.requestPersistentStorage();
-
+  // W2: ask the browser to treat this origin as persistent, so WebKit does
+  // not evict the local database under memory pressure. Brave/Chrome on
+  // Android often refuse this permission — that's fine, the IndexedDB
+  // backend itself persists data across restarts (reported via
+  // opened.persistent). We call persist() as a best-effort hint, but the
+  // database's own persistence verdict is what matters for data safety.
   if (Env.isConfigured) {
     await Api.instance.init();
     await OwnerAuth.instance.init();
   }
+  await web.requestPersistentStorage(); // best-effort; result is not fatal
 
-  runApp(StardomApp(opened: opened, storagePersisted: persisted));
+  runApp(StardomApp(opened: opened, storagePersisted: opened.persistent));
 }
 
 class StardomApp extends StatefulWidget {
@@ -114,6 +116,12 @@ class _StardomAppState extends State<StardomApp> with WidgetsBindingObserver {
       _state = s;
       refresh();
     });
+    // Automatic background sync: the instant the browser reports online,
+    // push pending sales to the server — no manual "Sync now" needed.
+    web.listenForOnline(() {
+      if (!mounted) return;
+      _sync.onOnline();
+    });
     // Every local change (a sale, a setting, a payment method, a void) is
     // mirrored to localStorage shortly after it lands, so a crash or a PC
     // restart right after selling still keeps the sale. Debounced: a sync
@@ -149,6 +157,13 @@ class _StardomAppState extends State<StardomApp> with WidgetsBindingObserver {
       // can say whether this booth still needs its server code.
       await _db.deactivatePhotolessProducts(_storeId!);
       await _devices.ensureRegistered(_storeId!);
+      // Record whether this device asked the browser to never evict its data
+      // (W2), so Settings can show it per-device. Best-effort: if the browser
+      // refused, the flag stays false and the device row still works.
+      final persistent = await web.requestPersistentStorage();
+      if (_devices.current != null) {
+        await _db.setDevicePersistent(_devices.current!.id, persistent);
+      }
       _sync.start(_storeId!);
       unawaited(_sync.syncAll());
     }
@@ -206,6 +221,10 @@ class _StardomAppState extends State<StardomApp> with WidgetsBindingObserver {
     // the browser take the lock back the moment it is not.
     if (state == AppLifecycleState.resumed) {
       unawaited(web.acquireWakeLock());
+      // Coming back to the foreground: if online, sync pending rows immediately.
+      if (web.isOnline) {
+        unawaited(_sync.syncNow());
+      }
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       unawaited(web.releaseWakeLock());
@@ -446,7 +465,7 @@ class _NavPill extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.leadingBar = false,
+    this.stacked = false,
   });
 
   final IconData icon;
@@ -454,8 +473,13 @@ class _NavPill extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  /// The rail's 4.5 px `--primary` left bar (spec §2.7 sidebar active style).
-  final bool leadingBar;
+  /// Phone bottom bar: glyph ABOVE the label. Five icon+label pills side by
+  /// side cannot fit the design's 360–430 px base (spec §1.3/§2.1: 11px
+  /// labels under an outlined glyph — at 360px each of the 5 tabs gets 72px,
+  /// less than the glyph plus the word), so the bar stacks them, the same
+  /// treatment the 72px compact rail uses. Without it the pill's Row
+  /// overflows horizontally on every phone.
+  final bool stacked;
 
   @override
   Widget build(BuildContext context) {
@@ -466,14 +490,16 @@ class _NavPill extends StatelessWidget {
       icon,
       size: 22,
       fill: selected ? 1 : 0,
-      color: AppColors.ink,
+      color: selected ? AppColors.primary : AppColors.inkSoft,
     );
     final labelText = Text(
       label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: sora(
         11,
         weight: FontWeight.w700,
-        color: AppColors.ink,
+        color: selected ? AppColors.primary : AppColors.inkSoft,
         height: 1.1,
       ),
     );
@@ -486,13 +512,15 @@ class _NavPill extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.pill),
+        splashColor: AppColors.yellow.withValues(alpha: 0.18),
+        highlightColor: AppColors.yellow.withValues(alpha: 0.10),
         child: AnimatedContainer(
           duration: motion
               ? const Duration(milliseconds: 150)
               : Duration.zero,
           curve: Curves.easeOutCubic,
           padding: EdgeInsets.symmetric(
-            horizontal: leadingBar ? 12 : 14,
+            horizontal: stacked ? 6 : 14,
             vertical: 7,
           ),
           decoration: BoxDecoration(
@@ -506,38 +534,30 @@ class _NavPill extends StatelessWidget {
                 ? const [AppShadows.navPillShadow]
                 : const <BoxShadow>[],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [glyph, const SizedBox(width: 7), labelText],
-          ),
+          child: stacked
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    glyph,
+                    const SizedBox(height: 2),
+                    labelText,
+                  ],
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [glyph, const SizedBox(width: 7), labelText],
+                ),
         ),
       ),
     );
-    if (!leadingBar || !selected) return pill;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 4.5,
-          height: 28,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.only(
-              topRight: Radius.circular(3),
-              bottomRight: Radius.circular(3),
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        pill,
-      ],
-    );
+    return pill;
   }
 }
 
-/// The fixed bottom bar (portrait iPad + phone): five tabs, ≥56 pt targets,
-/// safe-area aware — the stock Material `NavigationBar` replaced because it
+/// The fixed phone-only bottom bar: five tabs, ≥56 pt targets, safe-area
+/// aware — the stock Material `NavigationBar` replaced because it
 /// cannot draw the spec's gradient pill or its hard stamp shadow.
 class PosNavBar extends StatelessWidget {
   const PosNavBar({
@@ -571,6 +591,7 @@ class PosNavBar extends StatelessWidget {
                       icon: destinations[i].$1,
                       label: destinations[i].$2,
                       selected: i == selectedIndex,
+                      stacked: true, // phone: glyph above the label (§2.1)
                       onTap: () => onDestinationSelected(i),
                     ),
                   ),

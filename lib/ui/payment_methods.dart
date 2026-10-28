@@ -424,7 +424,11 @@ class _PaymentMethodFormScreenState extends State<PaymentMethodFormScreen> {
                         variant: isWallet
                             ? PosButtonVariant.primary
                             : PosButtonVariant.ghost,
-                        onPressed: () => setState(() => _type = 'wallet'),
+                        // 'ewallet' — the exact value the server's
+                        // payment_methods_type_check accepts (cash | ewallet |
+                        // bank). The old 'wallet' was refused with 23514 and
+                        // the queued row never pushed.
+                        onPressed: () => setState(() => _type = 'ewallet'),
                       ),
                     ),
                   ],

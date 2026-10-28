@@ -1467,7 +1467,14 @@ class ProductSkeleton extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(height: 150, color: AppColors.surfaceMid),
+        // Flexible, not a fixed 150: the Sell grid gives a card its height
+        // from childAspectRatio (≈201px at the 171px card a phone's 2-column
+        // grid produces), so a fixed image plus the text block overflowed the
+        // card by 8.5px on every phone-width layout. The grid is always
+        // bounded (GridView), so the skeleton fills whatever height it gets.
+        Expanded(
+          child: Container(height: 150, color: AppColors.surfaceMid),
+        ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Column(

@@ -13,7 +13,7 @@ insert into stores (
   '11111111-1111-4111-8111-111111111111',
   'ST⭐️R:Dom x ka1ofakind',
   'Fast. Simple. Offline. Built for Filipino Small Businesses.',
-  'STAR:DOM Artisan Marketplace & Pop-up Tour',
+  'ST⭐️R:Dom x ka1ofakind Artisan Marketplace & Pop-up Tour',
   '000-000-000-000',
   'Unit 12, South Luzon Atelier, Santa Rosa, Laguna',
   'PTU-2026-00015',

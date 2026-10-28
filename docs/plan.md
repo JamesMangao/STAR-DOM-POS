@@ -127,7 +127,7 @@ Every table: `id UUID` client-generated, `store_id`, `device_id` (where applicab
 | name | text | "STAR:DOM Artisan & Pop-up Hub" |
 | tagline | text | "Fast. Simple. Offline. Built for Filipino Small Businesses." |
 | owner_id | uuid | → auth.users(id), single owner |
-| receipt_name | text | "STAR:DOM Artisan Marketplace & Pop-up Tour" |
+| receipt_name | text | "ST⭐️R:Dom x ka1ofakind Artisan Marketplace & Pop-up Tour" |
 | receipt_tin | text | "000-000-000-000" |
 | receipt_address | text | "Unit 12, South Luzon Atelier, Santa Rosa, Laguna" |
 | receipt_accreditation | text | "PTU-2026-00015" |

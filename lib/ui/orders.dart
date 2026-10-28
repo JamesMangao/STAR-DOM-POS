@@ -18,10 +18,10 @@ import 'widgets.dart';
 /// Screen 06 — ORDERS.
 ///
 /// What was sold, when, how it was paid and whether it reached the shop.
-/// Two filters only — Today / All and the payment method — because a cashier
-/// answering "did Maya already pay for that?" must never build a query. The
-/// All view is bounded: it shows the newest [pageLimit] orders, never the
-/// whole history.
+/// Filters: Today / This Week / This Month / Custom days / All Time, plus
+/// a payment-method chip and a search field. A cashier answering "did Maya
+/// already pay for that?" must never build a query — every filter maps to a
+/// single database call.
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
 
@@ -29,10 +29,16 @@ class OrdersScreen extends StatefulWidget {
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
+/// How the orders list is time-filtered.
+enum _OrderFilter { today, week, month, custom, all }
+
 class _OrdersScreenState extends State<OrdersScreen> {
   static const pageLimit = 50;
 
-  bool _today = true;
+  _OrderFilter _filter = _OrderFilter.today;
+  /// For [custom]: start (inclusive) and end (exclusive), both UTC.
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
   String? _methodId;
   String _search = '';
   List<PaymentMethod> _methods = const [];
@@ -92,17 +98,85 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Future<void> _load() async {
     final scope = PosScope.read(context);
     final methods = await scope.db.listPaymentMethods(scope.store);
-    final orders = await scope.db.listOrders(
-      scope.store,
-      businessDate: _today ? DateTime.now() : null,
-      paymentMethodId: _methodId,
-      limit: _today ? null : pageLimit,
-    );
+    List<Order> orders;
+    final now = DateTime.now().toUtc();
+    switch (_filter) {
+      case _OrderFilter.today:
+        orders = await scope.db.listOrders(
+          scope.store,
+          businessDate: now,
+          paymentMethodId: _methodId,
+          limit: null,
+        );
+      case _OrderFilter.week:
+        final start = now.subtract(const Duration(days: 7));
+        orders = await scope.db.ordersInRange(
+          scope.store,
+          start: start,
+          end: now.add(const Duration(days: 1)),
+        );
+        if (_methodId != null) {
+          orders = orders.where((o) => o.paymentMethodId == _methodId).toList();
+        }
+      case _OrderFilter.month:
+        final start = now.subtract(const Duration(days: 30));
+        orders = await scope.db.ordersInRange(
+          scope.store,
+          start: start,
+          end: now.add(const Duration(days: 1)),
+        );
+        if (_methodId != null) {
+          orders = orders.where((o) => o.paymentMethodId == _methodId).toList();
+        }
+      case _OrderFilter.custom:
+        final start = _rangeStart ?? now.subtract(const Duration(days: 1));
+        final end = _rangeEnd ?? now.add(const Duration(days: 1));
+        orders = await scope.db.ordersInRange(
+          scope.store,
+          start: start,
+          end: end,
+        );
+        if (_methodId != null) {
+          orders = orders.where((o) => o.paymentMethodId == _methodId).toList();
+        }
+      case _OrderFilter.all:
+        orders = await scope.db.listOrders(
+          scope.store,
+          paymentMethodId: _methodId,
+          limit: pageLimit,
+        );
+    }
     final chips = await scope.db.chipsFor(orders);
-    final voided = await scope.db.voidedCount(
-      scope.store,
-      businessDate: _today ? DateTime.now() : null,
-    );
+    int voided;
+    switch (_filter) {
+      case _OrderFilter.today:
+        voided = await scope.db.voidedCount(scope.store, businessDate: now);
+      case _OrderFilter.week:
+        voided = (await scope.db.voidedOrdersInRange(
+          scope.store,
+          start: now.subtract(const Duration(days: 7)),
+          end: now.add(const Duration(days: 1)),
+        ))
+            .length;
+      case _OrderFilter.month:
+        voided = (await scope.db.voidedOrdersInRange(
+          scope.store,
+          start: now.subtract(const Duration(days: 30)),
+          end: now.add(const Duration(days: 1)),
+        ))
+            .length;
+      case _OrderFilter.custom:
+        final start = _rangeStart ?? now.subtract(const Duration(days: 1));
+        final end = _rangeEnd ?? now.add(const Duration(days: 1));
+        voided = (await scope.db.voidedOrdersInRange(
+          scope.store,
+          start: start,
+          end: end,
+        ))
+            .length;
+      case _OrderFilter.all:
+        voided = 0;
+    }
     // Client-side filter on order number and note (keeps the query simple).
     final filtered = _search.isEmpty
         ? orders
@@ -141,10 +215,41 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (mounted) _load();
   }
 
-  void _select({bool? today, String? methodId}) {
+  void _select(_OrderFilter filter) {
     setState(() {
-      if (today != null) _today = today;
-      _methodId = methodId;
+      _filter = filter;
+      if (filter != _OrderFilter.custom) {
+        _rangeStart = null;
+        _rangeEnd = null;
+      }
+      _loading = true;
+    });
+    _load();
+  }
+
+  /// Open a date-range dialog for the Custom filter. User picks start and end
+  /// dates (inclusive start, exclusive end at end of day).
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now().toUtc();
+    final start = _rangeStart ?? now.subtract(const Duration(days: 1));
+    final end = _rangeEnd ?? now.add(const Duration(days: 1));
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 1)),
+      initialDateRange: start.isBefore(end)
+          ? DateTimeRange(start: start, end: end)
+          : null,
+    );
+    if (!mounted || picked == null) return;
+    // End date is exclusive: shift to end of day so the whole day is included.
+    final endOfDay = DateTime.utc(
+      picked.end.year, picked.end.month, picked.end.day, 23, 59, 59,
+    ).add(const Duration(seconds: 1));
+    setState(() {
+      _filter = _OrderFilter.custom;
+      _rangeStart = DateTime.utc(picked.start.year, picked.start.month, picked.start.day);
+      _rangeEnd = endOfDay;
       _loading = true;
     });
     _load();
@@ -191,16 +296,40 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       padding: const EdgeInsets.only(right: 8),
                       child: PillChip(
                         label: 'Today',
-                        selected: _today,
-                        onTap: () => _select(today: true, methodId: _methodId),
+                        selected: _filter == _OrderFilter.today,
+                        onTap: () => _select(_OrderFilter.today),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: PillChip(
-                        label: 'All',
-                        selected: !_today,
-                        onTap: () => _select(today: false, methodId: _methodId),
+                        label: 'This Week',
+                        selected: _filter == _OrderFilter.week,
+                        onTap: () => _select(_OrderFilter.week),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: PillChip(
+                        label: 'This Month',
+                        selected: _filter == _OrderFilter.month,
+                        onTap: () => _select(_OrderFilter.month),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: PillChip(
+                        label: 'Custom',
+                        selected: _filter == _OrderFilter.custom,
+                        onTap: _pickCustomRange,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: PillChip(
+                        label: 'All Time',
+                        selected: _filter == _OrderFilter.all,
+                        onTap: () => _select(_OrderFilter.all),
                       ),
                     ),
                     for (final m in _methods.where((m) => m.isEnabled))
@@ -210,9 +339,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           label: m.name,
                           selected: _methodId == m.id,
                           dense: true,
-                          onTap: () => _select(
-                            methodId: _methodId == m.id ? null : m.id,
-                          ),
+                          onTap: () {
+                            _methodId = _methodId == m.id ? null : m.id;
+                            _loading = true;
+                            _load();
+                          },
                         ),
                       ),
                   ],
@@ -258,7 +389,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (_orders.isEmpty) {
       return EmptyState(
         icon: AppIcons.orders,
-        title: _today ? 'No sales yet today' : 'No sales yet',
+        title: _filter == _OrderFilter.today ? 'No sales yet today' : 'No sales yet',
         message:
             'Every sale lands here the moment it is taken — paid, pending or '
             'voided.',
@@ -284,7 +415,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 style: jakarta(12, color: AppColors.inkSoft),
               ),
             ),
-          if (!_today && _orders.length == pageLimit)
+          if (_filter == _OrderFilter.all && _orders.length == pageLimit)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Text(

@@ -18,6 +18,9 @@ import 'widgets.dart';
 /// the cash count that closes the drawer. Expected cash is
 /// float + (cash sales − voided cash sales), so the number the owner counts
 /// against is the number actually in the drawer.
+///
+/// Time scope: Today / This Week / This Month / Custom range / All time —
+/// same date-range language as the Orders screen.
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
@@ -25,13 +28,19 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
+/// How the reports are time-filtered.
+enum _ReportFilter { today, week, month, custom, all }
+
 class _ReportsScreenState extends State<ReportsScreen> {
-  DateTime _day = DateTime.now();
+  _ReportFilter _filter = _ReportFilter.today;
+  /// For [custom]: start (inclusive) and end (exclusive), both UTC.
+  DateTime? _rangeStart;
+  DateTime? _rangeEnd;
 
   /// Every day at once instead of one business day. The totals, the method /
   /// hour / category breakdowns all widen; the drawer tools (cash count, End
   /// of Day) stay day-scoped and disappear, because a drawer closes per day.
-  bool _allTime = false;
+  bool get _allTime => _filter == _ReportFilter.all;
 
   List<Order> _active = const [];
   Map<String, PaymentMethod> _methods = const {};
@@ -108,38 +117,71 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return v == null || v.isNegative ? null : Money.round(v);
   }
 
+  /// The UTC [start, end) window for the current filter.
+  (DateTime, DateTime) _range() {
+    final now = DateTime.now().toUtc();
+    switch (_filter) {
+      case _ReportFilter.today:
+        final tz = 480; // Asia/Manila — same constant used by BusinessDate
+        final start = BusinessDate.startOfDayUtc(now, tzOffsetMinutes: tz);
+        return (start, start.add(const Duration(days: 1)));
+      case _ReportFilter.week:
+        return (
+          now.subtract(const Duration(days: 7)),
+          now.add(const Duration(days: 1)),
+        );
+      case _ReportFilter.month:
+        return (
+          now.subtract(const Duration(days: 30)),
+          now.add(const Duration(days: 1)),
+        );
+      case _ReportFilter.custom:
+        return (
+          _rangeStart ?? now.subtract(const Duration(days: 1)),
+          _rangeEnd ?? now.add(const Duration(days: 1)),
+        );
+      case _ReportFilter.all:
+        return (DateTime.utc(2000), now.add(const Duration(days: 1)));
+    }
+  }
+
   Future<void> _load() async {
     final scope = PosScope.read(context);
     final store = scope.store;
     final device = await scope.devices.ensureRegistered(store);
     final methods = await scope.db.listPaymentMethods(store);
-    // No businessDate = every order the store has (the day-scoped helpers
-    // treat a null date as "all of them").
-    final date = _allTime ? null : _day;
-    final active = await scope.db.activeOrders(store, businessDate: date);
-    final voided = await scope.db.voidedCount(store, businessDate: date);
-    final cash = _allTime
-        ? 0.0
-        : await scope.db.cashExpected(
+    final (start, end) = _range();
+
+    // For day-scoped views use the single-day helpers (they know business
+    // dates). For wider windows pull orders in range and count voids in range.
+    List<Order> active;
+    int voided;
+    if (_filter == _ReportFilter.today) {
+      active = await scope.db.activeOrders(store, businessDate: start);
+      voided = await scope.db.voidedCount(store, businessDate: start);
+    } else {
+      active = await scope.db.ordersInRange(store, start: start, end: end);
+      voided =
+          (await scope.db.voidedOrdersInRange(store, start: start, end: end))
+              .length;
+    }
+
+    // Cash drawer tools only make sense for a single business day.
+    final cash = _filter == _ReportFilter.today
+        ? await scope.db.cashExpected(
             storeId: store,
-            businessDate: _day,
+            businessDate: start,
             cashPaymentMethodId: _cashMethod?.id ?? '',
-          );
+          )
+        : 0.0;
     final floatSetting = await scope.db.getSetting(store, 'cash_float');
-    final closed = _allTime
-        ? null
-        : await scope.db.dayClose(
+    final closed = _filter == _ReportFilter.today
+        ? await scope.db.dayClose(
             storeId: store,
             deviceId: device.id,
-            businessDate: _day,
-          );
-    final tz = await scope.db.tzOffsetMinutes(store);
-    final start = _allTime
-        ? DateTime.utc(2000)
-        : BusinessDate.startOfDayUtc(_day, tzOffsetMinutes: tz);
-    final end = _allTime
-        ? DateTime.now().toUtc().add(const Duration(days: 1))
-        : start.add(const Duration(days: 1));
+            businessDate: start,
+          )
+        : null;
     final byCategory = await scope.db.salesByCategory(
       store,
       start: start,
@@ -165,43 +207,68 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _pickDay() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _allTime ? DateTime.now() : _day,
+      initialDate: DateTime.now(),
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now(),
     );
     if (picked == null || !mounted) return;
     setState(() {
-      _day = picked;
-      _allTime = false;
+      _filter = _ReportFilter.today;
       _loading = true;
       _counted.clear();
     });
     _load();
   }
 
-  /// The scope menu behind the Reports header button: one day (today or a
-  /// picked date) or the whole history.
-  void _applyScope(String scope) {
-    if (scope == 'day') {
-      unawaited(_pickDay());
-      return;
-    }
+  /// Open a date-range dialog for the Custom filter.
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now().toUtc();
+    final start = _rangeStart ?? now.subtract(const Duration(days: 1));
+    final end = _rangeEnd ?? now.add(const Duration(days: 1));
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 1)),
+      initialDateRange: start.isBefore(end)
+          ? DateTimeRange(start: start, end: end)
+          : null,
+    );
+    if (!mounted || picked == null) return;
+    // End date is exclusive: shift to end of day so the whole day is included.
+    final endOfDay = DateTime.utc(
+      picked.end.year, picked.end.month, picked.end.day, 23, 59, 59,
+    ).add(const Duration(seconds: 1));
     setState(() {
-      if (scope == 'today') {
-        _day = DateTime.now();
-        _allTime = false;
-      } else {
-        _allTime = true;
+      _filter = _ReportFilter.custom;
+      _rangeStart = DateTime.utc(picked.start.year, picked.start.month, picked.start.day);
+      _rangeEnd = endOfDay;
+      _loading = true;
+      _counted.clear();
+    });
+    _load();
+  }
+
+  /// Set the scope and reload.
+  void _applyScope(_ReportFilter filter) {
+    setState(() {
+      _filter = filter;
+      if (filter == _ReportFilter.today) {
+        _rangeStart = null;
+        _rangeEnd = null;
       }
       _loading = true;
-      _counted.clear();
+      if (filter != _ReportFilter.today) _counted.clear();
     });
     _load();
   }
 
-  String get _scopeLabel => _allTime
-      ? 'All time'
-      : (_isToday ? 'Today' : Fmt.date(_day));
+  String get _scopeLabel => switch (_filter) {
+        _ReportFilter.today => 'Today',
+        _ReportFilter.week => 'This Week',
+        _ReportFilter.month => 'This Month',
+        _ReportFilter.custom => 'Custom range',
+        _ReportFilter.all => 'All time',
+      };
 
   Future<void> _saveFloat(String value) async {
     final scope = PosScope.read(context);
@@ -233,7 +300,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final variance = Money.round(counted - _expected);
     final ok = await confirm(
       context,
-      title: 'Close ${_isToday ? 'today' : Fmt.date(_day)}?',
+      title: 'Close today?',
       message:
           'Expected ₱${_expected.toStringAsFixed(2)} in the drawer, you counted '
           '₱${counted.toStringAsFixed(2)} — variance ₱'
@@ -248,7 +315,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final closed = await scope.db.closeDay(
       storeId: scope.store,
       deviceId: device.id,
-      businessDate: _day,
+      businessDate: _rangeStart ?? DateTime.now(),
       cashPaymentMethodId: cash.id,
       cashActual: counted,
       cashFloat: _float,
@@ -265,9 +332,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   bool get _isToday {
     final now = DateTime.now();
-    return _day.year == now.year &&
-        _day.month == now.month &&
-        _day.day == now.day;
+    final d = _rangeStart ?? now;
+    return d.year == now.year && d.month == now.month && d.day == now.day;
   }
 
   @override
@@ -277,30 +343,59 @@ class _ReportsScreenState extends State<ReportsScreen> {
       appBar: AppBar(
         title: const Text('Reports'),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: _applyScope,
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'today', child: Text('Today')),
-              PopupMenuItem(value: 'day', child: Text('Pick a date…')),
-              PopupMenuItem(value: 'all', child: Text('All time')),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _allTime ? AppIcons.reports : AppIcons.calendar,
-                    size: 18,
-                    color: AppColors.ink,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _scopeLabel,
-                    style: sora(13, weight: FontWeight.w700),
-                  ),
-                ],
+          // Time-scope chips mirroring Orders: Today / This Week / This Month /
+          // Custom range / All time. The drawer tools disappear for anything
+          // wider than one day.
+          SizedBox(
+            height: 54,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screen,
+                vertical: 8,
               ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PillChip(
+                    label: 'Today',
+                    selected: _filter == _ReportFilter.today,
+                    onTap: () => _applyScope(_ReportFilter.today),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PillChip(
+                    label: 'This Week',
+                    selected: _filter == _ReportFilter.week,
+                    onTap: () => _applyScope(_ReportFilter.week),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PillChip(
+                    label: 'This Month',
+                    selected: _filter == _ReportFilter.month,
+                    onTap: () => _applyScope(_ReportFilter.month),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PillChip(
+                    label: 'Custom',
+                    selected: _filter == _ReportFilter.custom,
+                    onTap: _pickCustomRange,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PillChip(
+                    label: 'All Time',
+                    selected: _filter == _ReportFilter.all,
+                    onTap: () => _applyScope(_ReportFilter.all),
+                  ),
+                ),
+              ],
             ),
           ),
           const Padding(
@@ -429,9 +524,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         title: 'By category',
                         children: _categoryRows(),
                       ),
-                      // The drawer closes per business day — an all-time
-                      // view has nothing to count or close.
-                      if (!_allTime && _cashMethod != null)
+                      // The drawer closes per business day — an all-time,
+                      // week, month or custom view has nothing to count.
+                      if (!_allTime && _filter == _ReportFilter.today && _cashMethod != null)
                         SectionCard(
                           title: 'Cash count',
                           children: [
@@ -474,9 +569,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   weight: FontWeight.w800,
                                   color:
                                       Money.round(_countedValue! - _expected) ==
-                                          0
-                                      ? AppColors.green
-                                      : AppColors.primary,
+                                              0
+                                          ? AppColors.green
+                                          : AppColors.primary,
                                 ),
                               ),
                             if (_closed != null)
@@ -495,11 +590,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               ),
                           ],
                         )
-                      else if (!_allTime)
+                      else if (!_allTime && _filter != _ReportFilter.today)
                         const PosAlert.info(
                           text:
-                              'Enable a Cash payment method to count and close the '
-                              'drawer.',
+                              'Cash count is only available for a single day. '
+                              'Pick Today to count and close the drawer.',
                         ),
                       const SizedBox(height: AppSpacing.xl),
                     ],
@@ -520,7 +615,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (byMethod.isEmpty) {
       return [
         Text(
-          _allTime ? 'No sales yet.' : 'No sales yet for this day.',
+          _allTime ? 'No sales yet.' : 'No sales yet for this selection.',
           style: jakarta(13, color: AppColors.inkSoft),
         ),
       ];
@@ -576,7 +671,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (byHour.isEmpty) {
       return [
         Text(
-          _allTime ? 'No sales yet.' : 'No sales yet for this day.',
+          _allTime ? 'No sales yet.' : 'No sales yet for this selection.',
           style: jakarta(13, color: AppColors.inkSoft),
         ),
       ];
@@ -584,9 +679,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final hours = byHour.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     return [
-      // The mockup's chart first — bars that show SHAPE — then the exact
-      // figures underneath (the progress bars are gone: they read as
-      // "loading", not data).
       _HourlyChart(hours: hours),
       const SizedBox(height: AppSpacing.sm),
       const Divider(),
@@ -635,7 +727,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         Text(
           _allTime
               ? 'No sales by category yet.'
-              : 'No sales by category for this day.',
+              : 'No sales by category for this selection.',
           style: jakarta(13, color: AppColors.inkSoft),
         ),
       ];
@@ -681,9 +773,6 @@ class _KpiCard extends StatelessWidget {
 
   final String label;
   final Widget child;
-
-  /// The design system's `.kpi` icon tile (§2.3): 34 px, radius 9,
-  /// `#FFE0DE` background, crimson glyph, top-right.
   final IconData? icon;
 
   @override

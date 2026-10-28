@@ -800,6 +800,21 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _persistentStorageMeta = const VerificationMeta(
+    'persistentStorage',
+  );
+  @override
+  late final GeneratedColumn<bool> persistentStorage = GeneratedColumn<bool>(
+    'persistent_storage',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("persistent_storage" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -832,6 +847,7 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
     deviceCode,
     isActive,
     lastSyncAt,
+    persistentStorage,
     createdAt,
     updatedAt,
   ];
@@ -891,6 +907,15 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         ),
       );
     }
+    if (data.containsKey('persistent_storage')) {
+      context.handle(
+        _persistentStorageMeta,
+        persistentStorage.isAcceptableOrUnknown(
+          data['persistent_storage']!,
+          _persistentStorageMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -936,6 +961,10 @@ class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_sync_at'],
       ),
+      persistentStorage: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}persistent_storage'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -960,6 +989,7 @@ class Device extends DataClass implements Insertable<Device> {
   final String deviceCode;
   final bool isActive;
   final DateTime? lastSyncAt;
+  final bool persistentStorage;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Device({
@@ -969,6 +999,7 @@ class Device extends DataClass implements Insertable<Device> {
     required this.deviceCode,
     required this.isActive,
     this.lastSyncAt,
+    required this.persistentStorage,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -983,6 +1014,7 @@ class Device extends DataClass implements Insertable<Device> {
     if (!nullToAbsent || lastSyncAt != null) {
       map['last_sync_at'] = Variable<DateTime>(lastSyncAt);
     }
+    map['persistent_storage'] = Variable<bool>(persistentStorage);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -998,6 +1030,7 @@ class Device extends DataClass implements Insertable<Device> {
       lastSyncAt: lastSyncAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSyncAt),
+      persistentStorage: Value(persistentStorage),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -1015,6 +1048,7 @@ class Device extends DataClass implements Insertable<Device> {
       deviceCode: serializer.fromJson<String>(json['deviceCode']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       lastSyncAt: serializer.fromJson<DateTime?>(json['lastSyncAt']),
+      persistentStorage: serializer.fromJson<bool>(json['persistentStorage']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1029,6 +1063,7 @@ class Device extends DataClass implements Insertable<Device> {
       'deviceCode': serializer.toJson<String>(deviceCode),
       'isActive': serializer.toJson<bool>(isActive),
       'lastSyncAt': serializer.toJson<DateTime?>(lastSyncAt),
+      'persistentStorage': serializer.toJson<bool>(persistentStorage),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -1041,6 +1076,7 @@ class Device extends DataClass implements Insertable<Device> {
     String? deviceCode,
     bool? isActive,
     Value<DateTime?> lastSyncAt = const Value.absent(),
+    bool? persistentStorage,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Device(
@@ -1050,6 +1086,7 @@ class Device extends DataClass implements Insertable<Device> {
     deviceCode: deviceCode ?? this.deviceCode,
     isActive: isActive ?? this.isActive,
     lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
+    persistentStorage: persistentStorage ?? this.persistentStorage,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -1067,6 +1104,9 @@ class Device extends DataClass implements Insertable<Device> {
       lastSyncAt: data.lastSyncAt.present
           ? data.lastSyncAt.value
           : this.lastSyncAt,
+      persistentStorage: data.persistentStorage.present
+          ? data.persistentStorage.value
+          : this.persistentStorage,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -1081,6 +1121,7 @@ class Device extends DataClass implements Insertable<Device> {
           ..write('deviceCode: $deviceCode, ')
           ..write('isActive: $isActive, ')
           ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('persistentStorage: $persistentStorage, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1095,6 +1136,7 @@ class Device extends DataClass implements Insertable<Device> {
     deviceCode,
     isActive,
     lastSyncAt,
+    persistentStorage,
     createdAt,
     updatedAt,
   );
@@ -1108,6 +1150,7 @@ class Device extends DataClass implements Insertable<Device> {
           other.deviceCode == this.deviceCode &&
           other.isActive == this.isActive &&
           other.lastSyncAt == this.lastSyncAt &&
+          other.persistentStorage == this.persistentStorage &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -1119,6 +1162,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
   final Value<String> deviceCode;
   final Value<bool> isActive;
   final Value<DateTime?> lastSyncAt;
+  final Value<bool> persistentStorage;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -1129,6 +1173,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     this.deviceCode = const Value.absent(),
     this.isActive = const Value.absent(),
     this.lastSyncAt = const Value.absent(),
+    this.persistentStorage = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1140,6 +1185,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     required String deviceCode,
     this.isActive = const Value.absent(),
     this.lastSyncAt = const Value.absent(),
+    this.persistentStorage = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1154,6 +1200,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Expression<String>? deviceCode,
     Expression<bool>? isActive,
     Expression<DateTime>? lastSyncAt,
+    Expression<bool>? persistentStorage,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1165,6 +1212,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       if (deviceCode != null) 'device_code': deviceCode,
       if (isActive != null) 'is_active': isActive,
       if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
+      if (persistentStorage != null) 'persistent_storage': persistentStorage,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1178,6 +1226,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     Value<String>? deviceCode,
     Value<bool>? isActive,
     Value<DateTime?>? lastSyncAt,
+    Value<bool>? persistentStorage,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1189,6 +1238,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
       deviceCode: deviceCode ?? this.deviceCode,
       isActive: isActive ?? this.isActive,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+      persistentStorage: persistentStorage ?? this.persistentStorage,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1216,6 +1266,9 @@ class DevicesCompanion extends UpdateCompanion<Device> {
     if (lastSyncAt.present) {
       map['last_sync_at'] = Variable<DateTime>(lastSyncAt.value);
     }
+    if (persistentStorage.present) {
+      map['persistent_storage'] = Variable<bool>(persistentStorage.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1237,6 +1290,7 @@ class DevicesCompanion extends UpdateCompanion<Device> {
           ..write('deviceCode: $deviceCode, ')
           ..write('isActive: $isActive, ')
           ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('persistentStorage: $persistentStorage, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -9081,7 +9135,16 @@ class $$StoresTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$StoresTable, Store>(table),
+                  BaseReferences<_$AppDatabase, $StoresTable, Store>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9109,6 +9172,7 @@ typedef $$DevicesTableCreateCompanionBuilder = DevicesCompanion Function({
   required String deviceCode,
   Value<bool> isActive,
   Value<DateTime?> lastSyncAt,
+  Value<bool> persistentStorage,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -9120,6 +9184,7 @@ typedef $$DevicesTableUpdateCompanionBuilder = DevicesCompanion Function({
   Value<String> deviceCode,
   Value<bool> isActive,
   Value<DateTime?> lastSyncAt,
+  Value<bool> persistentStorage,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -9161,6 +9226,11 @@ class $$DevicesTableFilterComposer
 
   ColumnFilters<DateTime> get lastSyncAt => $composableBuilder(
     column: $table.lastSyncAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get persistentStorage => $composableBuilder(
+    column: $table.persistentStorage,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9214,6 +9284,11 @@ class $$DevicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get persistentStorage => $composableBuilder(
+    column: $table.persistentStorage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9258,6 +9333,11 @@ class $$DevicesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get persistentStorage => $composableBuilder(
+    column: $table.persistentStorage,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -9299,6 +9379,7 @@ class $$DevicesTableTableManager
                 Value<String> deviceCode = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> lastSyncAt = const Value.absent(),
+                Value<bool> persistentStorage = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -9309,6 +9390,7 @@ class $$DevicesTableTableManager
                 deviceCode: deviceCode,
                 isActive: isActive,
                 lastSyncAt: lastSyncAt,
+                persistentStorage: persistentStorage,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -9321,6 +9403,7 @@ class $$DevicesTableTableManager
                 required String deviceCode,
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> lastSyncAt = const Value.absent(),
+                Value<bool> persistentStorage = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -9331,12 +9414,22 @@ class $$DevicesTableTableManager
                 deviceCode: deviceCode,
                 isActive: isActive,
                 lastSyncAt: lastSyncAt,
+                persistentStorage: persistentStorage,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DevicesTable, Device>(table),
+                  BaseReferences<_$AppDatabase, $DevicesTable, Device>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -9604,7 +9697,16 @@ class $$CategoriesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$CategoriesTable, Category>(table),
+                  BaseReferences<_$AppDatabase, $CategoriesTable, Category>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10032,7 +10134,16 @@ class $$ProductsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ProductsTable, Product>(table),
+                  BaseReferences<_$AppDatabase, $ProductsTable, Product>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10429,7 +10540,16 @@ class $$PaymentMethodsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PaymentMethodsTable, PaymentMethod>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PaymentMethodsTable,
+                    PaymentMethod
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -10841,7 +10961,16 @@ class $$OrdersTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OrdersTable, Order>(table),
+                  BaseReferences<_$AppDatabase, $OrdersTable, Order>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11095,7 +11224,16 @@ class $$OrderItemsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OrderItemsTable, OrderItem>(table),
+                  BaseReferences<_$AppDatabase, $OrderItemsTable, OrderItem>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11430,7 +11568,16 @@ class $$PaymentsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PaymentsTable, Payment>(table),
+                  BaseReferences<_$AppDatabase, $PaymentsTable, Payment>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11644,7 +11791,16 @@ class $$OrderVoidsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OrderVoidsTable, OrderVoid>(table),
+                  BaseReferences<_$AppDatabase, $OrderVoidsTable, OrderVoid>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -11898,7 +12054,16 @@ class $$StockEventsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$StockEventsTable, StockEvent>(table),
+                  BaseReferences<_$AppDatabase, $StockEventsTable, StockEvent>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12213,7 +12378,16 @@ class $$DayClosesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DayClosesTable, DayClose>(table),
+                  BaseReferences<_$AppDatabase, $DayClosesTable, DayClose>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12543,7 +12717,16 @@ class $$SyncOutboxTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SyncOutboxTable, SyncOutboxData>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SyncOutboxTable,
+                    SyncOutboxData
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12738,7 +12921,16 @@ class $$SettingsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SettingsTable, Setting>(table),
+                  BaseReferences<_$AppDatabase, $SettingsTable, Setting>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -12918,7 +13110,16 @@ class $$ImageCachesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ImageCachesTable, ImageCache>(table),
+                  BaseReferences<_$AppDatabase, $ImageCachesTable, ImageCache>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),

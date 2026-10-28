@@ -65,6 +65,9 @@ Phase1_Audit_Report.txt
 scripts/node_modules/
 node_modules/
 
+# Local Wrangler state (Pages dev/deploy scratch, regenerable)
+.wrangler/
+
 # Review bundles (assembled locally for a reviewer, regenerable)
 docs/review-bundle*.txt
 

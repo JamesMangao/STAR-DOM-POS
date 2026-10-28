@@ -1,4 +1,4 @@
-# ST⭐️R:Dom POS
+# ST⭐️R:Dom x ka1ofakind POS
 
 > **Offline-first booth POS** for the ST⭐️R:Dom × ka1ofakind artisan pop-up.  
 > Flutter web PWA · Supabase backend · Cloudflare Pages hosting.
@@ -18,6 +18,25 @@ Single-owner point-of-sale system designed to run on an **iPad 9th gen** (Add to
 | Receipts | PDF via system share/AirPrint (`pdf` + `printing` packages) |
 | Fonts | Bundled — Sora + Plus Jakarta Sans (no CDN fetch at runtime) |
 | Secrets | `--dart-define` for `SUPABASE_URL` + `SUPABASE_ANON_KEY` only |
+
+---
+
+## Screenshots
+
+One build, two layouts. Both shots are the deployed PWA rendered in Chromium:
+a desktop-width window, and a real Android phone profile (Pixel 7 UA, touch,
+mobile viewport).
+
+**Desktop web (1440×900)** — sidebar navigation, product grid, pinned cart panel
+
+![Desktop web: sidebar nav, product grid, pinned cart panel](docs/screenshots/web-desktop.png)
+
+**Android phone (Pixel 7)** — bottom navigation bar, single-column grid, sticky promo bar
+
+<img src="docs/screenshots/android-phone.png" width="380" alt="Android phone: bottom nav bar with Sell, Orders, Products, Reports and Settings">
+
+Regenerate them with `node scripts/screenshots.js` (set `POS_URL` to shoot a
+local build instead of https://stardom-pos.pages.dev).
 
 ---
 
@@ -162,6 +181,7 @@ in `build/web/build-manifest.json` against
 | `node scripts/manifest.js` | Regenerate `web/manifest.json` |
 | `node scripts/font-check.js` | Verify ₱ (U+20B1) exists in bundled fonts |
 | `node scripts/offline-test.js` | Playwright: boot + offline reload smoke test |
+| `node scripts/screenshots.js` | Capture the README screenshots (desktop + Android phone) |
 
 ---
 
@@ -193,3 +213,9 @@ See [`docs/owner-setup.md`](docs/owner-setup.md) for the step-by-step iPad setup
 - **No CDN at runtime** — CanvasKit, fonts, and SQLite are all same-origin assets.
 - **No secrets in the bundle** — `build-web.js` scan exits non-zero if any credential leaks.
 - **Bundled fonts** — Sora lacks ₱ (U+20B1); Plus Jakarta Sans is the declared fallback in `lib/core/theme.dart`.
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 JamesMangao.

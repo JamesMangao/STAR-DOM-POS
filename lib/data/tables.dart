@@ -41,6 +41,8 @@ class Devices extends Table {
       boolean().named('is_active').withDefault(const Constant(true))();
   DateTimeColumn get lastSyncAt =>
       dateTime().named('last_sync_at').nullable()();
+  BoolColumn get persistentStorage =>
+      boolean().named('persistent_storage').withDefault(const Constant(false))();
   DateTimeColumn get createdAt =>
       dateTime().named('created_at').withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt =>

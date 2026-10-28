@@ -62,6 +62,14 @@ class SyncEngine {
     _timer = null;
   }
 
+  /// Called when the browser comes back online — triggers an immediate
+  /// background sync so pending sales push to the server without a manual tap.
+  void onOnline() {
+    if (_storeId == null) return;
+    if (!Api.instance.isReady) return;
+    unawaited(syncNow());
+  }
+
   void _setState(SyncState s) {
     if (_state == s) return;
     _state = s;
@@ -328,10 +336,9 @@ class SyncEngine {
           // signal is a 20 s timeout or a refused connection on one device.
           await _db.markOutboxOffline(e.id, detail ?? 'offline');
           offline = true;
-          _lastSyncError = detail == null
-              ? 'Supabase tables unreachable — check your internet and Supabase setup.'
-              : 'Supabase tables unreachable — check your internet and Supabase setup.'
-                  ' ($detail)';
+          _lastSyncError =
+              'Cannot reach Supabase — check your internet and Supabase setup.'
+                  '${detail == null ? '' : ' ($detail)'}';
         case PushResult.authExpired:
           await _db.markOutboxOffline(e.id, 'session expired');
           offline = true;
@@ -364,6 +371,13 @@ class SyncEngine {
           'tap Sync again once the sale has synced.';
     }
     _setState(failed ? SyncState.failed : SyncState.synced);
+
+    // Record when this device last reached the server (B4: device clock is
+    // fine here — it is a local "we touched Supabase" timestamp, never used
+    // for ordering rows).
+    if (!failed && _devices?.current?.id != null) {
+      unawaited(_db.setDeviceLastSyncAt(_devices!.current!.id));
+    }
   }
 
   /// The order id inside a queued SALE payload; null when the payload is not

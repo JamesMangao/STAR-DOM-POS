@@ -11,10 +11,16 @@ import 'picked_image.dart';
 /// W2: ask the browser to make this origin's storage persistent, so WebKit does
 /// not evict the local database (every unsynced sale would go with it).
 /// Returns what the browser ANSWERED, not what we asked for.
+///
+/// Brave/Chrome on Android and some WebKit builds do not grant persistence —
+/// in that case this returns `false` and the caller (Settings) shows the
+/// "Allow persistent storage" button so the owner can retry after a gesture.
 Future<bool> requestPersistentStorage() async {
   try {
     final storage = web.window.navigator.storage;
+    // Already persistent? Nothing to do.
     if ((await storage.persisted().toDart).toDart) return true;
+    // Ask for persistence. May throw or return false on unsupported browsers.
     return (await storage.persist().toDart).toDart;
   } catch (_) {
     return false; // unsupported (private mode, old WebKit) — ignore silently
@@ -348,4 +354,42 @@ class PwaInstallPrompt {
   }
 
   bool get isAvailable => _deferred != null;
+}
+
+/// Online/offline detection for automatic sync.
+final _onlineListeners = <void Function()>{};
+final _offlineListeners = <void Function()>{};
+var _listenersAttached = false;
+
+void listenForOnline(void Function() onOnline) {
+  _onlineListeners.add(onOnline);
+  _ensureListenersAttached();
+}
+
+void listenForOffline(void Function() onOffline) {
+  _offlineListeners.add(onOffline);
+  _ensureListenersAttached();
+}
+
+void _ensureListenersAttached() {
+  if (_listenersAttached) return;
+  _listenersAttached = true;
+  try {
+    final onlineHandler = (web.Event _) {
+      for (final cb in List.of(_onlineListeners)) cb();
+    };
+    final offlineHandler = (web.Event _) {
+      for (final cb in List.of(_offlineListeners)) cb();
+    };
+    web.window.addEventListener('online', onlineHandler.toJS);
+    web.window.addEventListener('offline', offlineHandler.toJS);
+  } catch (_) {}
+}
+
+bool get isOnline {
+  try {
+    return web.window.navigator.onLine;
+  } catch (_) {
+    return true;
+  }
 }

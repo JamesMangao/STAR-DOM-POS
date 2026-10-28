@@ -346,7 +346,7 @@ async function build() {
       id: idOf('store', 'main'),
       name: 'ST⭐️R:Dom x ka1ofakind',
       tagline: 'Fast. Simple. Offline. Built for Filipino Small Businesses.',
-      receiptName: 'STAR:DOM Artisan Marketplace & Pop-up Tour',
+      receiptName: 'ST⭐️R:Dom x ka1ofakind Artisan Marketplace & Pop-up Tour',
       receiptTin: '',
       receiptAddress: '',
       receiptAccreditation: '',

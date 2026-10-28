@@ -54,3 +54,10 @@ bool localStorageWrite(String key, String value) => false;
 void listenForAppUpdate(void Function() onReady) {}
 
 void applyAppUpdate() {}
+
+/// Non-web: no online/offline events. Assume online.
+void listenForOnline(void Function() onOnline) {}
+void listenForOffline(void Function() onOffline) {}
+
+/// Non-web: assume online.
+bool get isOnline => true;

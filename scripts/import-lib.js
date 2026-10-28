@@ -156,7 +156,7 @@ function storeRow(storeId, ownerId) {
     name: 'ST⭐️R:Dom x ka1ofakind',
     tagline: 'Fast. Simple. Offline. Built for Filipino Small Businesses.',
     ownerId,
-    receiptName: 'STAR:DOM Artisan Marketplace & Pop-up Tour',
+    receiptName: 'ST⭐️R:Dom x ka1ofakind Artisan Marketplace & Pop-up Tour',
     receiptTin: '',
     receiptAddress: '',
     receiptAccreditation: '',

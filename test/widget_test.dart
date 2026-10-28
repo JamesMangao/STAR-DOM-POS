@@ -45,7 +45,9 @@ void main() {
     await pumpShell(tester, db, storageMode: 'unsafeIndexedDb');
 
     // The catalogue is auto-seeded into the empty database on boot.
-    expect(find.byType(PosNavBar), findsOneWidget);
+    // The default test surface is 800×600 — the MEDIUM tier (600–899), so
+    // navigation is the compact left rail; the bottom bar is phone-only.
+    expect(find.byType(PosNavRailCompact), findsOneWidget);
     expect(find.byIcon(AppIcons.sell), findsOneWidget);
 
     await disposeShell(tester, db);
@@ -75,7 +77,7 @@ void main() {
     await pumpShell(tester, db, storageMode: 'unsafeIndexedDb');
 
     // The five tabs are there and Sell is the landing tab.
-    expect(find.byType(PosNavBar), findsOneWidget);
+    expect(find.byType(PosNavRailCompact), findsOneWidget);
     expect(find.byIcon(AppIcons.sell), findsOneWidget);
     expect(find.text('No products yet'), findsOneWidget);
     // No stale sales → the data-loss banner stays away.
@@ -100,7 +102,13 @@ void main() {
       scrollable: settingsScrollable,
     );
     expect(find.textContaining('unsafeIndexedDb'), findsOneWidget);
-    expect(find.textContaining('data survives reloads'), findsOneWidget);
+    // The row's own sentence, not a bare 'data survives reloads': the
+    // persistent-storage line below it says that too, so the loose
+    // contains-finder matches two widgets.
+    expect(
+      find.text('unsafeIndexedDb — data survives reloads'),
+      findsOneWidget,
+    );
 
     await tester.scrollUntilVisible(
       find.text('Sync details'),

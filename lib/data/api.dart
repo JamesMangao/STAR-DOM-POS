@@ -9,6 +9,19 @@ import '../core/env.dart';
 import 'bundle.dart';
 import 'sync_policy.dart';
 
+/// Verdict of one step of the one-tap connection test
+/// (Settings → Sync details → Test connection).
+enum ProbeState { pass, warn, fail }
+
+/// One line of that test: what was checked, how it went, in plain words.
+class ProbeResult {
+  const ProbeResult(this.label, this.state, this.detail);
+
+  final String label;
+  final ProbeState state;
+  final String detail;
+}
+
 /// Supabase REST + Storage client. Lazy — only initialized when env is set.
 class Api {
   Api._();
@@ -161,8 +174,137 @@ class Api {
   /// How long a push may take before the row is left for the next tick.
   static const Duration pushTimeout = Duration(seconds: 20);
 
+  // ------------------------------------------------------ connection test
+
+  /// Each step of the probe may take at most this long — a test that hangs
+  /// is worse than a test that fails.
+  static const Duration probeTimeout = Duration(seconds: 10);
+
+  /// The one-tap connection test: four independent steps, each reported in
+  /// its own words, so "it doesn't sync" separates into SETUP / SERVER /
+  /// SIGN-IN / TABLES — the four real reasons a push cannot land.
+  ///
+  /// Never throws: a probe that crashes proves nothing. READ-ONLY by
+  /// design — it writes no row, changes no state.
+  Future<List<ProbeResult>> probe() async {
+    final out = <ProbeResult>[];
+
+    // 1. SETUP — the build must carry the two public values.
+    if (!isReady) {
+      out.add(const ProbeResult(
+        'Setup',
+        ProbeState.fail,
+        'Supabase is not configured in this build — sync cannot run at all.',
+      ));
+      return out; // everything below needs a client
+    }
+    out.add(const ProbeResult(
+      'Setup',
+      ProbeState.pass,
+      'Supabase URL and key are present in this build.',
+    ));
+
+    // 2. SERVER — can THIS device reach the host at all? A raw request:
+    // any HTTP answer (even 401) proves reachability; only a transport
+    // error means the network, DNS or a blocker on this device — which is
+    // the sentence the sync banner used to guess at.
+    var reachable = false;
+    try {
+      final sw = Stopwatch()..start();
+      final res = await http
+          .get(
+            Uri.parse('${Env.supabaseUrl}/rest/v1/'),
+            headers: {'apikey': Env.supabaseAnonKey},
+          )
+          .timeout(probeTimeout);
+      reachable = true;
+      out.add(ProbeResult(
+        'Server',
+        ProbeState.pass,
+        'reachable in ${sw.elapsedMilliseconds} ms (HTTP ${res.statusCode}).',
+      ));
+    } catch (e) {
+      out.add(ProbeResult(
+        'Server',
+        ProbeState.fail,
+        'cannot reach ${Uri.parse(Env.supabaseUrl).host} — network, DNS or a '
+        'blocker on this device. (${describeError(e)})',
+      ));
+    }
+
+    // 3. SIGN-IN — RLS is owner-only; signed out, every write is refused
+    // with 42501 no matter how healthy the network is.
+    final session = _c.auth.currentSession;
+    if (session == null) {
+      out.add(const ProbeResult(
+        'Sign-in',
+        ProbeState.fail,
+        'not signed in — tap "Sign in to sync" in Settings. Selling keeps '
+        'working; syncing cannot.',
+      ));
+    } else {
+      final who = session.user.email ?? session.user.id;
+      out.add(ProbeResult(
+        'Sign-in',
+        ProbeState.pass,
+        'signed in as $who — every write is checked against this account.',
+      ));
+    }
+
+    // 4. TABLES — the real RLS verdict, read-only: rows back means this
+    // account owns them; none means signed in as the WRONG account (RLS
+    // hides rows it does not own); a refusal is the server's own words.
+    if (session == null) {
+      out.add(const ProbeResult(
+        'Tables',
+        ProbeState.warn,
+        'skipped — needs a sign-in first.',
+      ));
+    } else if (!reachable) {
+      out.add(const ProbeResult(
+        'Tables',
+        ProbeState.warn,
+        'skipped — server unreachable.',
+      ));
+    } else {
+      try {
+        final rows = await Future<List<Map<String, dynamic>>>.sync(
+          () async => await _c.from('stores').select().limit(5),
+        ).timeout(probeTimeout);
+        if (rows.isEmpty) {
+          out.add(const ProbeResult(
+            'Tables',
+            ProbeState.warn,
+            'signed in, but this account sees NO store rows — RLS hides rows '
+            'it does not own. Is this the owner\u2019s account?',
+          ));
+        } else {
+          out.add(ProbeResult(
+            'Tables',
+            ProbeState.pass,
+            'read ${rows.length} store row(s) — this account owns the shop '
+            'data.',
+          ));
+        }
+      } catch (e) {
+        out.add(ProbeResult(
+          'Tables',
+          ProbeState.fail,
+          'server refused the read — ${describeError(e) ?? 'permission denied (RLS).'}',
+        ));
+      }
+    }
+    return out;
+  }
+
   /// Classify a transport/provider error into the push policy's vocabulary
   /// (B5). A timeout or a network failure is OFFLINE, never a failed attempt.
+  ///
+  /// A `PostgrestException` means the **server responded** — the network is
+  /// fine, the write was refused. It is never "offline": classifying a
+  /// server response as "tables unreachable" sends the owner chasing wifi
+  /// for what is really an RLS rejection, constraint violation, or other
+  /// server-side verdict. A null/unparseable code still came from the server.
   ///
   /// W2/web: `dart:io` does not exist in the browser, so the network shapes are
   /// `package:http`'s `ClientException` (what the browser fetch layer raises,
@@ -172,7 +314,10 @@ class Api {
   static PushResult classifyError(Object error) {
     if (error is AuthException) return PushResult.authExpired;
     if (error is PostgrestException) {
+      // The server answered: never offline. No parseable code = failed,
+      // not offline — the row was seen by Supabase and refused.
       final code = int.tryParse(error.code ?? '');
+      if (code == null) return PushResult.failed;
       return PushPolicy.classify(status: code);
     }
     if (error is TimeoutException || error is http.ClientException) {
@@ -201,7 +346,17 @@ class Api {
         s.length > maxLen ? '${s.substring(0, maxLen - 1)}…' : s;
     if (error is PostgrestException) {
       final code = int.tryParse(error.code ?? '');
-      if (code == null || code < 400) return null;
+      if (code == null || code < 400) {
+        // The server responded but sent no usable PostgreSQL code — still
+        // report its message instead of returning null, which used to make
+        // the sync banner say "tables unreachable" with no detail at all.
+        final msg = error.message.trim();
+        return clip(
+          msg.isEmpty
+              ? 'Postgrest error: server rejected the write'
+              : 'Postgrest error: $msg',
+        );
+      }
       final msg = error.message.trim();
       final details = error.details?.toString().trim() ?? '';
       final body = details.isNotEmpty && details != msg

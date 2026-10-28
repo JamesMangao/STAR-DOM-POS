@@ -14,7 +14,7 @@
 //   4. scans every file in build/web for the two server secrets and for the
 //      owner credentials, and requires the SUPABASE_URL host to be PRESENT as
 //      a control (a scan that cannot see the defines proves nothing),
-//   5. prints the Cloudflare Pages command — and stops there.
+//   5. prints a build summary and stops there.
 //
 // It never deploys, never prints a value, and exits non-zero on any hit.
 
@@ -298,6 +298,10 @@ function main() {
 
   // ---- offline requirements (W2/W4) --------------------------------------
   const need = [
+    'index.html',
+    'flutter.js',
+    'flutter_bootstrap.js',
+    'main.dart.js',
     'canvaskit/chromium/canvaskit.wasm',
     'canvaskit/canvaskit.wasm',
     'sqlite3.wasm',
@@ -316,7 +320,7 @@ function main() {
     if (!there) failed++;
   }
 
-  // Flutter's self-unregistering stub must not be in the deploy...
+  // Flutter's self-unregistering stub must not be in the build...
   const stub = fs.existsSync(path.join(OUT, 'flutter_service_worker.js'));
   console.log(`  ${'flutter SW stub removed'.padEnd(28)} ${stub ? 'STILL PRESENT' : 'OK'}`);
   if (stub) failed++;
@@ -336,8 +340,6 @@ function main() {
       ? '\nbuild-web: scan OK — no secret, control present.'
       : `\nbuild-web: FAILED with ${failed} problem(s).`,
   );
-  console.log('\nDeploy (the USER runs this; this script never does):');
-  console.log('  npx wrangler pages deploy build/web --project-name stardom-pos');
   process.exit(failed === 0 ? 0 : 1);
 }
 

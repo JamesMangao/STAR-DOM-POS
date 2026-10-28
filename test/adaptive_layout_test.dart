@@ -10,11 +10,15 @@ import 'package:stardom_pos/ui/widgets.dart';
 /// Adaptive layout, verified at the exact target device: iPad (9th gen,
 /// 10.2", 1620×2160 physical px @2x → 810×1080 logical points).
 ///
-/// Landscape (1080×810 logical) must show the wide enhancements — left
-/// NavigationRail, the pinned Sell cart panel, capped form widths. Portrait
-/// (810×1080 logical) must fall back to the phone flow — bottom
-/// NavigationBar, sticky cart bar — while forms stay centred and capped
-/// instead of stretching across the 810 pt canvas.
+/// Navigation is three-tier (see PosShell): the BOTTOM NavigationBar is
+/// phone-only (< 600 logical px). From 600 up the sidebar takes over —
+/// compact left rail at 600–899 (portrait iPad), full rail at ≥ 900
+/// (landscape iPad / desktop), which is where these screens came from.
+/// Landscape (1080×810) therefore shows the wide enhancements — left
+/// NavigationRail, the pinned Sell cart panel, capped form widths — while
+/// portrait (810×1080) keeps the single-column flow (sticky cart bar,
+/// centred and capped forms) with the COMPACT rail for navigation instead
+/// of a bottom bar.
 void main() {
   const landscapePhysical = Size(2160, 1620); // → 1080×810 logical
   const portraitPhysical = Size(1620, 2160); // → 810×1080 logical
@@ -107,14 +111,44 @@ void main() {
     await disposeShell(tester, db);
   });
 
-  testWidgets('portrait iPad: bottom nav bar, not the rail', (
+  testWidgets('portrait iPad: compact left rail, not the bottom bar', (
     tester,
   ) async {
     final db = await seededDb();
     await pumpShell(tester, db, physical: portraitPhysical);
 
+    expect(find.byType(PosNavRailCompact), findsOneWidget);
+    expect(find.byType(PosNavBar), findsNothing);
+
+    await disposeShell(tester, db);
+  });
+
+  testWidgets('phone (390×844): bottom nav bar, no rail', (tester) async {
+    final db = await seededDb();
+    // 780×1688 physical @2x → 390×844 logical, under the 600 breakpoint.
+    await pumpShell(tester, db, physical: const Size(780, 1688));
+
     expect(find.byType(PosNavBar), findsOneWidget);
     expect(find.byType(PosNavRail), findsNothing);
+    expect(find.byType(PosNavRailCompact), findsNothing);
+
+    await disposeShell(tester, db);
+  });
+
+  testWidgets('narrow phone (360×800): bottom bar fits, labels never overflow', (
+    tester,
+  ) async {
+    final db = await seededDb();
+    // 720×1600 physical @2x → 360×800 logical: the tightest phone the five
+    // tabs must fit. A Row-style pill overflows horizontally here, and a
+    // RenderFlex overflow fails the test on its own.
+    await pumpShell(tester, db, physical: const Size(720, 1600));
+
+    expect(find.byType(PosNavBar), findsOneWidget);
+    expect(find.byType(PosNavRail), findsNothing);
+    expect(find.text('Sell'), findsWidgets);
+    expect(find.text('Settings'), findsWidgets);
+    expect(tester.takeException(), isNull);
 
     await disposeShell(tester, db);
   });

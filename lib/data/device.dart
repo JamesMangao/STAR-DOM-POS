@@ -58,6 +58,7 @@ class DeviceRegistry {
       deviceName: defaultDeviceName,
       deviceCode: '', // the server fills this in
       isActive: true,
+      persistentStorage: false,
       lastSyncAt: null,
       createdAt: now,
       updatedAt: now,
@@ -116,6 +117,7 @@ class DeviceRegistry {
         deviceName: device.deviceName,
         deviceCode: res.deviceCode,
         isActive: device.isActive,
+        persistentStorage: device.persistentStorage,
         lastSyncAt: device.lastSyncAt,
         createdAt: device.createdAt,
         updatedAt: now,

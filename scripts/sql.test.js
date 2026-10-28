@@ -52,6 +52,44 @@ test('migrations apply cleanly and are idempotent x2', async () => {
       where n.nspname='public' and p.proname='set_updated_at'`,
   );
   assert.equal(rows(fn)[0].n, 0, 'set_updated_at() must not exist');
+  assert.ok(
+    migrationFiles().some((f) => f.endsWith('007_missing_columns.sql')),
+    'migration 007 must be included in fresh database builds',
+  );
+  const columns = await db.query(
+    `select table_name, column_name, data_type, is_nullable, column_default
+       from information_schema.columns
+      where table_schema = 'public'
+        and ((table_name = 'devices' and column_name = 'persistent_storage')
+          or (table_name = 'stores' and column_name = 'synced_at'))
+      order by table_name, column_name`,
+  );
+  assert.deepEqual(rows(columns).map((r) => [r.table_name, r.column_name]), [
+    ['devices', 'persistent_storage'],
+    ['stores', 'synced_at'],
+  ]);
+  assert.equal(rows(columns)[0].data_type, 'boolean');
+  assert.equal(rows(columns)[0].is_nullable, 'NO');
+  assert.equal(rows(columns)[0].column_default, 'false');
+  assert.equal(rows(columns)[1].data_type, 'timestamp with time zone');
+  assert.equal(rows(columns)[1].is_nullable, 'YES');
+  // These two columns are deployed LIVE already, so migration 007 must also
+  // remain a no-op when it is applied on top of a DB with those columns.
+  await db.exec(`
+    alter table public.devices add column if not exists persistent_storage boolean not null default false;
+    alter table public.stores add column if not exists synced_at timestamptz;
+  `);
+  const afterRetry = await db.query(
+    `select table_name, column_name from information_schema.columns
+      where table_schema = 'public'
+        and ((table_name = 'devices' and column_name = 'persistent_storage')
+          or (table_name = 'stores' and column_name = 'synced_at'))
+      order by table_name, column_name`,
+  );
+  assert.deepEqual(rows(afterRetry).map((r) => [r.table_name, r.column_name]), [
+    ['devices', 'persistent_storage'],
+    ['stores', 'synced_at'],
+  ]);
   await db.close();
 });
 

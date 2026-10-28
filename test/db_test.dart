@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
@@ -58,6 +59,7 @@ void main() {
         deviceName: 'Phone',
         deviceCode: code,
         isActive: true,
+        persistentStorage: false,
         lastSyncAt: null,
         createdAt: now,
         updatedAt: now,
@@ -703,6 +705,26 @@ void main() {
         expect(close.variance, 10);
       },
     );
+
+    test('close-day outbox payload uses the store-local calendar date', () async {
+      await seedStore();
+      await seedDevice();
+      await seedCashMethod();
+      await db.closeDay(
+        storeId: 'store-1',
+        deviceId: 'device-1',
+        // 10:30 UTC is 18:30 in the default UTC+8 store timezone.
+        businessDate: DateTime.utc(2026, 1, 15, 10, 30),
+        cashPaymentMethodId: 'pm-cash',
+        cashActual: 0,
+      );
+
+      final pending = await db.pendingOutbox('store-1');
+      expect(pending, hasLength(1));
+      final payload = jsonDecode(pending.single.payload) as Map<String, dynamic>;
+      expect(payload['business_date'], '2026-01-15');
+      expect(payload['business_date'], isNot(contains('T')));
+    });
 
     test(
       'closing the same day twice updates one row (LWW), no duplicate',
@@ -1837,6 +1859,249 @@ void main() {
       },
     );
 
+    test('remote day-close date-only values map to store-local midnight', () async {
+      await seedStore();
+      final applied = await db.applyRemoteRow('day_closes', {
+        'id': 'dc-date-only',
+        'store_id': 'store-1',
+        'device_id': 'device-1',
+        'business_date': '2026-01-15',
+        'cash_expected': 10,
+        'cash_actual': 10,
+        'variance': 0,
+        'created_at': '2026-01-15T12:00:00Z',
+        'updated_at': '2026-01-15T12:00:00Z',
+      });
+
+      expect(applied, isTrue);
+      final rows = await db.select(db.dayCloses).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.businessDate.toUtc(), DateTime.utc(2026, 1, 14, 16));
+    });
+
+    test(
+      'a TEXT timestamp in devices is healed on open, so sync never wedges',
+      () async {
+        // The old raw setDevicePersistent bound an ISO-8601 STRING into an
+        // INTEGER timestamp column. drift parses that column with int.parse,
+        // so ONE poisoned row failed every devices SELECT — and because the
+        // dedupe pass maps every row, sync reported "Local cleanup of devices
+        // failed: FormatException: 2026-…Z" on every single run.
+        final file = File(
+          '${Directory.systemTemp.path}${Platform.pathSeparator}'
+          'stomed_timestamp_repair.db',
+        );
+        if (file.existsSync()) file.deleteSync();
+        addTearDown(() async {
+          if (file.existsSync()) await file.delete();
+        });
+
+        final poisoned = AppDatabase(NativeDatabase(file), clock: fixedClock);
+        for (final id in const ['dev-a', 'dev-b']) {
+          await poisoned.into(poisoned.devices).insert(
+                DevicesCompanion.insert(
+                  id: id,
+                  storeId: 'store-1',
+                  deviceName: 'Booth iPad',
+                  deviceCode: id,
+                  createdAt: Value(DateTime.utc(2026, 1, 1)),
+                  updatedAt: Value(DateTime.utc(2026, 1, 1)),
+                ),
+              );
+        }
+        await poisoned.customStatement(
+          'UPDATE devices SET updated_at = ? WHERE id = ?',
+          ['2026-10-27T16:29:14.617Z', 'dev-a'],
+        );
+        await expectLater(
+          poisoned.listDevices('store-1'),
+          throwsA(isA<FormatException>()),
+          reason: 'the bug: a text timestamp makes every devices read throw',
+        );
+        await poisoned.close();
+
+        // The next open repairs the row before any query runs.
+        final healed = AppDatabase(NativeDatabase(file), clock: fixedClock);
+        final devs = await healed.listDevices('store-1');
+        expect(devs, hasLength(2));
+        expect(
+          devs.firstWhere((d) => d.id == 'dev-a').updatedAt.toUtc(),
+          DateTime.utc(2026, 10, 27, 16, 29, 14),
+          reason: 'the timestamp keeps the precision drift supports',
+        );
+        final types = await healed
+            .customSelect('SELECT typeof(updated_at) AS t FROM devices')
+            .get();
+        expect(
+          types.map((r) => r.read<String>('t')).toSet(),
+          {'integer'},
+        );
+        await healed.deduplicateDevices('store-1'); // no longer throws
+        await healed.close();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      },
+    );
+
+    test(
+      'a queued legacy close-day instant is rewritten to the store-local date',
+      () async {
+        final file = File(
+          '${Directory.systemTemp.path}${Platform.pathSeparator}'
+          'stomed_business_date_repair.db',
+        );
+        if (file.existsSync()) file.deleteSync();
+        addTearDown(() async {
+          if (file.existsSync()) await file.delete();
+        });
+
+        final oldDb = AppDatabase(NativeDatabase(file), clock: fixedClock);
+        await oldDb.upsertStore(
+          Store(
+            id: 'store-1',
+            name: 'STAR:DOM',
+            tagline: '',
+            ownerId: '',
+            receiptName: '',
+            receiptTin: '',
+            receiptAddress: '',
+            receiptAccreditation: '',
+            receiptFooter: '',
+            currency: 'PHP',
+            createdAt: DateTime.utc(2026, 1, 1),
+            updatedAt: DateTime.utc(2026, 1, 1),
+          ),
+        );
+        await oldDb.upsertDevice(
+          Device(
+            id: 'device-1',
+            storeId: 'store-1',
+            deviceName: 'Phone',
+            deviceCode: 'A1',
+            isActive: true,
+            persistentStorage: false,
+            lastSyncAt: null,
+            createdAt: DateTime.utc(2026, 1, 1),
+            updatedAt: DateTime.utc(2026, 1, 1),
+          ),
+        );
+        await oldDb
+            .into(oldDb.paymentMethods)
+            .insert(
+              PaymentMethodsCompanion.insert(
+                id: 'pm-cash',
+                storeId: 'store-1',
+                name: 'Cash',
+                type: 'cash',
+                updatedAt: DateTime.utc(2026, 1, 1),
+              ),
+            );
+        await oldDb.closeDay(
+          storeId: 'store-1',
+          deviceId: 'device-1',
+          // 10:30 UTC is 18:30 in the default UTC+8 store timezone.
+          businessDate: DateTime.utc(2026, 1, 15, 10, 30),
+          cashPaymentMethodId: 'pm-cash',
+          cashActual: 0,
+        );
+        // Simulate what the OLD build pushed: a UTC instant in a store-local
+        // `date` column, parked after the server refused it.
+        await oldDb.customStatement("""
+          UPDATE sync_outbox
+             SET payload = replace(payload,
+                   '"business_date":"2026-01-15"',
+                   '"business_date":"2026-01-15T10:30:00.000Z"'),
+                 attempts = 8,
+                 last_error = 'date/time field value out of range'
+           WHERE entity = 'day_closes'
+        """);
+        final parked = await oldDb.select(oldDb.syncOutbox).get();
+        expect(
+          parked.where((r) => r.entity == 'day_closes').single.payload,
+          contains('T10:30:00.000Z'),
+          reason: 'the legacy shape really is in the queue',
+        );
+        await oldDb.close();
+
+        final healed = AppDatabase(NativeDatabase(file), clock: fixedClock);
+        final row = (await healed.pendingOutbox('store-1'))
+            .where((r) => r.entity == 'day_closes')
+            .single;
+        final payload = jsonDecode(row.payload) as Map<String, dynamic>;
+        expect(payload['business_date'], '2026-01-15');
+        expect(payload['business_date'], isNot(contains('T')));
+        expect(row.attempts, 0, reason: 'the rewritten row must retry now');
+        expect(row.lastError, isNull);
+        await healed.close();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      },
+    );
+
+    test('wallet payment type and parked outbox row are repaired on open', () async {
+      final file = File(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'stomed_wallet_repair.db',
+      );
+      if (file.existsSync()) file.deleteSync();
+      addTearDown(() async {
+        if (file.existsSync()) await file.delete();
+      });
+
+      final oldDb = AppDatabase(NativeDatabase(file), clock: fixedClock);
+      await oldDb.upsertStore(
+        Store(
+          id: 'store-1',
+          name: 'STAR:DOM',
+          tagline: '',
+          ownerId: '',
+          receiptName: '',
+          receiptTin: '',
+          receiptAddress: '',
+          receiptAccreditation: '',
+          receiptFooter: '',
+          currency: 'PHP',
+          createdAt: DateTime.utc(2026, 1, 1),
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      await oldDb.upsertPaymentMethod(
+        PaymentMethod(
+          id: 'pm-wallet',
+          storeId: 'store-1',
+          name: 'GCash',
+          type: 'wallet',
+          color: '#15803D',
+          accountName: '',
+          accountNumber: '',
+          requireReference: false,
+          isEnabled: true,
+          sortOrder: 0,
+          createdAt: DateTime.utc(2026, 1, 1),
+          updatedAt: fixedClock(),
+        ),
+        deviceId: 'device-1',
+        storeId: 'store-1',
+      );
+      final queued = (await oldDb.pendingOutbox('store-1')).single;
+      await oldDb.markOutboxFailed(
+        queued.id,
+        '23514 check constraint',
+        attempts: PushPolicy.maxAttempts,
+        nextAttemptAt: DateTime.utc(2026, 2, 1),
+      );
+      await oldDb.close();
+
+      final healed = AppDatabase(NativeDatabase(file), clock: fixedClock);
+      expect((await healed.listPaymentMethods('store-1')).single.type, 'ewallet');
+      final pending = (await healed.pendingOutbox('store-1')).single;
+      final payload = jsonDecode(pending.payload) as Map<String, dynamic>;
+      expect(payload['type'], 'ewallet');
+      expect(pending.attempts, 0);
+      expect(pending.lastError, isNull);
+      expect(pending.nextAttemptAt, isNull);
+      await healed.close();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+
     test('the UI guard: liveXByName is normalised and excludes self', () async {
       await seedStore();
       await db
@@ -2091,7 +2356,7 @@ void main() {
 
       final dump = await db.exportAll();
 
-      expect(dump['schema_version'], 4);
+      expect(dump['schema_version'], 5);
       expect((dump['stores'] as List).length, 1);
       expect((dump['devices'] as List).length, 1);
       expect((dump['products'] as List).length, 1);

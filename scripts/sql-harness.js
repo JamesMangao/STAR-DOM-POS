@@ -94,7 +94,7 @@ function migrationFiles() {
     .map((f) => path.join(MIGRATIONS, f));
 }
 
-/** Apply 001..003 in order. `rounds` > 1 proves idempotency. */
+/** Apply every numbered migration in order. `rounds` > 1 proves idempotency. */
 async function applyMigrations(db, { rounds = 1 } = {}) {
   for (let r = 0; r < rounds; r++) {
     for (const file of migrationFiles()) {

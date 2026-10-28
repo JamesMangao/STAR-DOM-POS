@@ -47,12 +47,10 @@ class AppDatabase extends _$AppDatabase {
 
   /// v2 adds sync_outbox.next_attempt_at (B5 backoff).
   /// v3 adds the local-only image_cache table (W3, never synced).
-  /// v4 adds the four inventory-sheet columns on products (stock_status,
-  /// source_ref, notes, source_col1) — the values the owner writes by hand
-  /// on the paper inventory, kept verbatim because they are NOT derivable
-  /// from the stock count.
+  /// v5 adds devices.persistent_storage so Settings can show whether this
+  /// device asked the browser to never evict its data (W2).
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -90,8 +88,137 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
         'CREATE INDEX IF NOT EXISTS idx_voids_order ON order_voids (order_id)',
       );
+      // v5: add persistent_storage to devices. Raw SQL here because
+      // Migrator.addColumn has type issues with BoolColumn; onUpgrade can't
+      // use it. beforeOpen runs every open, so try/catch handles the
+      // "duplicate column" case on already-migrated databases.
+      try {
+        await customStatement(
+          'ALTER TABLE devices ADD COLUMN persistent_storage '
+          'BOOLEAN NOT NULL DEFAULT 0',
+        );
+      } catch (_) {
+        // Column already exists — fine.
+      }
+      await _repairTextTimestamps();
+      await _repairWalletPaymentTypes();
+      await _repairQueuedBusinessDates();
     },
   );
+
+  /// Heal timestamps left behind as TEXT by the old raw
+  /// [setDevicePersistent] statement (it bound an ISO-8601 string into an
+  /// INTEGER column).
+  ///
+  /// drift reads a `dateTime` column with `int.parse`, so ONE such row made
+  /// every SELECT of that table throw — on the web build the message is the
+  /// bare value: `FormatException: 2026-10-27T16:29:14.617Z`. Because the
+  /// devices SELECT maps every row, one poisoned `updated_at` failed the whole
+  /// devices dedupe pass and sync reported
+  /// "Local cleanup of devices failed" on every run.
+  ///
+  /// Runs on every open and only matches `typeof(...) = 'text'` rows, so on a
+  /// healthy database it is a scan that changes nothing. A value SQLite cannot
+  /// read as a date is left as-is — never nulled out — so nothing is lost by
+  /// running it. Drift stores SQLite date-times as Unix seconds, so this keeps
+  /// the supported precision and the expected integer representation.
+  Future<void> _repairTextTimestamps() async {
+    for (final table in allSchemaEntities.whereType<TableInfo>()) {
+      for (final col in table.$columns.whereType<DateTimeColumn>()) {
+        final name = col.name;
+        await customStatement(
+          'UPDATE ${table.actualTableName} SET $name = '
+          "CAST(strftime('%s', $name) AS INTEGER) "
+          "WHERE typeof($name) = 'text' AND strftime('%s', $name) IS NOT NULL",
+        );
+      }
+    }
+  }
+
+  /// Map the payment-method type this app used to write ('wallet') onto the
+  /// one the server accepts (`payment_methods_type_check` allows only cash |
+  /// ewallet | bank — verified live), and hand any queued push of the old
+  /// value a clean retry: those rows failed 23514 on every attempt, and a row
+  /// parked after [PushPolicy.maxAttempts] refusals never retries by itself.
+  Future<void> _repairWalletPaymentTypes() async {
+    await customStatement(
+      "UPDATE payment_methods SET type = 'ewallet' WHERE type = 'wallet'",
+    );
+    await customStatement(
+      'UPDATE sync_outbox SET payload = replace(payload, ?, ?), '
+      'attempts = 0, next_attempt_at = NULL, last_error = NULL '
+      "WHERE entity = 'payment_methods' AND synced_at IS NULL "
+      "AND payload LIKE '%\"type\":\"wallet\"%'",
+      ['"type":"wallet"', '"type":"ewallet"'],
+    );
+  }
+
+  /// The old close-day push put a UTC INSTANT in `business_date`, a store-local
+  /// DATE column, so the server read the day back one early. Rewrite any still
+  /// queued payload to the store-local `YYYY-MM-DD` key before it can go out.
+  Future<void> _repairQueuedBusinessDates() async {
+    final rows =
+        await (select(syncOutbox)
+              ..where((t) => t.entity.equals('day_closes') & t.syncedAt.isNull()))
+            .get();
+    for (final r in rows) {
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(r.payload);
+      } catch (_) {
+        continue; // a payload we cannot read is not ours to rewrite
+      }
+      if (decoded is! Map<String, dynamic>) continue;
+      final payload = decoded;
+      final raw = payload['business_date'];
+      if (raw is! String || raw.isEmpty || _ymd.hasMatch(raw)) continue;
+      final at = DateTime.tryParse(raw);
+      if (at == null) continue;
+      payload['business_date'] = BusinessDate.key(
+        at,
+        tzOffsetMinutes: await tzOffsetMinutes(r.storeId),
+      );
+      await (update(syncOutbox)..where((t) => t.id.equals(r.id))).write(
+        SyncOutboxCompanion(
+          payload: Value(jsonEncode(payload)),
+          attempts: const Value(0),
+          lastError: const Value(null),
+          nextAttemptAt: const Value(null),
+        ),
+      );
+    }
+  }
+
+  /// The store-local DATE the server holds, read back into the local column's
+  /// own shape: the UTC instant of that day's store-local midnight
+  /// ([BusinessDate.startOfDayUtc]). The DEVICE's zone must not decide the
+  /// day, so a plain `YYYY-MM-DD` is taken apart by parts; a legacy value that
+  /// still carries a time (the old push sent a UTC instant) is run through the
+  /// store offset instead. Null when unreadable — the caller keeps its
+  /// fallback.
+  Future<DateTime?> _businessDateFromServer(String? raw, String storeId) async {
+    if (raw == null || raw.isEmpty) return null;
+    final offset = Duration(minutes: await tzOffsetMinutes(storeId));
+    if (_ymd.hasMatch(raw)) {
+      final p = raw.split('-');
+      return DateTime.utc(
+        int.parse(p[0]),
+        int.parse(p[1]),
+        int.parse(p[2]),
+      ).subtract(offset);
+    }
+    final at = DateTime.tryParse(raw);
+    if (at == null) return null;
+    final local = at.toUtc().add(offset);
+    return DateTime.utc(
+      local.year,
+      local.month,
+      local.day,
+    ).subtract(offset);
+  }
+
+  /// `YYYY-MM-DD` — the shape a `date` column speaks.
+  static final RegExp _ymd = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
   static double r2(double v) => (v * 100).round() / 100;
 
@@ -262,7 +389,35 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> renameDevice(String id, String name) async =>
       (update(devices)..where((t) => t.id.equals(id))).write(
-        DevicesCompanion(deviceName: Value(name)),
+        DevicesCompanion(
+          deviceName: Value(name),
+          updatedAt: Value(_clock()),
+        ),
+      );
+
+  /// Record whether this device asked the browser to never evict its data (W2).
+  /// Saved to the devices table so Settings can show it per-device.
+  ///
+  /// A typed drift write, NOT raw SQL: this column is an INTEGER timestamp,
+  /// and binding an ISO-8601 string into it left `updated_at` as TEXT — the
+  /// next SELECT of the devices table then threw `FormatException` while
+  /// parsing it, which failed the whole sync dedupe pass. [_repairTextTimestamps]
+  /// heals rows written by the old raw statement.
+  Future<void> setDevicePersistent(String id, bool persistent) async =>
+      (update(devices)..where((t) => t.id.equals(id))).write(
+        DevicesCompanion(
+          persistentStorage: Value(persistent),
+          updatedAt: Value(_clock()),
+        ),
+      );
+
+  /// Stamp the device's last_sync_at after a successful push to the server.
+  Future<void> setDeviceLastSyncAt(String id) async =>
+      (update(devices)..where((t) => t.id.equals(id))).write(
+        DevicesCompanion(
+          lastSyncAt: Value(_clock()),
+          updatedAt: Value(_clock()),
+        ),
       );
 
   /// Toggle a device's active flag. WITHOUT [storeId] this is a local-only
@@ -349,6 +504,7 @@ class AppDatabase extends _$AppDatabase {
         deviceName: Value(from.deviceName),
         deviceCode: Value(from.deviceCode),
         isActive: const Value(true),
+        persistentStorage: Value(from.persistentStorage),
         lastSyncAt: const Value(null),
         createdAt: Value(from.createdAt),
         updatedAt: Value(_clock()),
@@ -1477,7 +1633,6 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: now,
         payload: _voidBundle(
           voidRow: voidRow,
-          orderNo: order.orderNo,
           stock: stockRows,
         ),
       );
@@ -1568,9 +1723,10 @@ class AppDatabase extends _$AppDatabase {
     String? closedBy,
   }) async {
     final now = _clock();
+    final tz = await tzOffsetMinutes(storeId);
     final day = BusinessDate.startOfDayUtc(
       businessDate,
-      tzOffsetMinutes: await tzOffsetMinutes(storeId),
+      tzOffsetMinutes: tz,
     );
     final cashSales = await cashExpected(
       storeId: storeId,
@@ -1612,7 +1768,9 @@ class AppDatabase extends _$AppDatabase {
           'id': existing.id,
           'store_id': storeId,
           'device_id': deviceId,
-          'business_date': day.toIso8601String(),
+          // The server column is a `date`: send the STORE-LOCAL day, never
+          // the UTC instant (which is the previous calendar day in Manila).
+          'business_date': BusinessDate.key(day, tzOffsetMinutes: tz),
           'cash_expected': expected,
           'cash_actual': cashActual,
           'variance': variance,
@@ -1664,7 +1822,7 @@ class AppDatabase extends _$AppDatabase {
         'id': row.id,
         'store_id': storeId,
         'device_id': deviceId,
-        'business_date': day.toIso8601String(),
+        'business_date': BusinessDate.key(day, tzOffsetMinutes: tz),
         'cash_expected': expected,
         'cash_actual': cashActual,
         'variance': variance,
@@ -2104,6 +2262,7 @@ class AppDatabase extends _$AppDatabase {
         deviceName: Value((row['device_name'] as String?) ?? 'Phone'),
         deviceCode: Value((row['device_code'] as String?) ?? ''),
         isActive: Value(row['is_active'] as bool? ?? true),
+        persistentStorage: Value(row['persistent_storage'] as bool? ?? false),
         lastSyncAt: Value(_ts(row['last_sync_at'])),
         createdAt: Value(
           _ts(row['created_at']) ?? existing?.createdAt ?? _clock(),
@@ -2763,7 +2922,13 @@ class AppDatabase extends _$AppDatabase {
         id: Value(id),
         storeId: Value(row['store_id'] as String),
         deviceId: Value(row['device_id'] as String),
-        businessDate: Value(_ts(row['business_date']) ?? _clock()),
+        businessDate: Value(
+          await _businessDateFromServer(
+                row['business_date'] as String?,
+                row['store_id'] as String,
+              ) ??
+              _clock(),
+        ),
         cashExpected: Value((row['cash_expected'] as num?)?.toDouble()),
         cashActual: Value((row['cash_actual'] as num?)?.toDouble()),
         variance: Value((row['variance'] as num?)?.toDouble()),
@@ -2896,13 +3061,11 @@ class AppDatabase extends _$AppDatabase {
 
   Map<String, dynamic> _voidBundle({
     required OrderVoid voidRow,
-    required String orderNo,
     required List<StockEvent> stock,
   }) => {
     VoidBundle.voidRow: {
       'id': voidRow.id,
       'order_id': voidRow.orderId,
-      'order_no': orderNo,
       'device_id': voidRow.deviceId,
       'reason': voidRow.reason,
       'voided_at': voidRow.voidedAt.toUtc().toIso8601String(),
@@ -2947,6 +3110,7 @@ class AppDatabase extends _$AppDatabase {
     'device_name': d.deviceName,
     'device_code': d.deviceCode,
     'is_active': d.isActive,
+    'persistent_storage': d.persistentStorage,
     'last_sync_at': d.lastSyncAt?.toUtc().toIso8601String(),
     'created_at': d.createdAt.toUtc().toIso8601String(),
     'updated_at': d.updatedAt.toUtc().toIso8601String(),

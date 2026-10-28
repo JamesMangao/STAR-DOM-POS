@@ -44,7 +44,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _footer = TextEditingController();
   final _deviceName = TextEditingController();
   String _storageMode = '—';
-  String _persisted = 'unknown';
   int _imageCount = 0;
   int _imageBytes = 0;
   List<String> _missing = const [];
@@ -87,10 +86,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final store = await scope.db.store(scope.store);
     final images = await scope.db.cachedImageCount();
     final bytes = await scope.db.cachedImageBytes();
-    final persisted = await scope.db.getSetting(
-      scope.store,
-      'storage_persisted',
-    );
     final device = await scope.devices.ensureRegistered(scope.store);
     final voidPin = await scope.db.getSetting(scope.store, VoidPin.key);
     if (!mounted) return;
@@ -107,7 +102,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       _deviceName.text = device.deviceName;
       _storageMode = scope.opened.description;
-      _persisted = persisted?.value ?? 'unknown';
       _imageCount = images;
       _imageBytes = bytes;
       _voidPinOn = (voidPin?.value ?? '').isNotEmpty;
@@ -128,10 +122,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'storage_persisted',
       ok ? 'yes' : 'no',
     );
+    // Also record on the device row so it shows per-device in Settings.
+    final device = scope.devices.current;
+    if (device != null) {
+      await scope.db.setDevicePersistent(device.id, ok);
+    }
     if (!mounted) return;
     setState(() {
       _persisting = false;
-      _persisted = ok ? 'yes' : 'no';
     });
     showSnack(
       context,
@@ -635,12 +633,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   DetailRow('Storage', _storageMode),
                   DetailRow(
                     'Persistent storage',
-                    '$_persisted (browser: ${scope.opened.persistent ? 'yes' : 'no'})',
+                    scope.opened.persistent
+                        ? 'yes — data survives reloads'
+                        : 'no — data lost on reload (do not use for real sales)',
                   ),
-                  // The browser said no at boot (WebKit evicts a
-                  // non-persistent origin — sales included). Asking again
-                  // needs a fresh gesture, so the button IS the gesture.
-                  if (_persisted != 'yes') ...[
+                  // Only show the retry button when the DB itself is not
+                  // persistent (in-memory). If opened.persistent is true, the
+                  // data survives reloads even if the browser declined the
+                  // optional “don’t evict” hint from storage.persist().
+                  if (!scope.opened.persistent) ...[
                     const SizedBox(height: AppSpacing.sm),
                     PosButton(
                       label: 'Allow persistent storage',
@@ -799,6 +800,10 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
   bool _signedIn = false;
   bool _started = false;
 
+  /// Last run of the one-tap connection test (null = not run yet).
+  List<ProbeResult>? _probe;
+  bool _probing = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -819,6 +824,18 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
     if (d.inHours >= 24) return '${d.inDays}d ${d.inHours % 24}h';
     if (d.inHours >= 1) return '${d.inHours}h ${d.inMinutes % 60}m';
     return '${d.inMinutes}m';
+  }
+
+  /// One tap, four verdicts (Setup / Server / Sign-in / Tables) — the
+  /// answer to "why doesn't this device sync?" without a log file.
+  Future<void> _runProbe() async {
+    setState(() => _probing = true);
+    final results = await Api.instance.probe();
+    if (!mounted) return;
+    setState(() {
+      _probing = false;
+      _probe = results;
+    });
   }
 
   @override
@@ -872,6 +889,29 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
                             'sales reach the shop.',
                       ),
                     ),
+                ],
+              ),
+              SectionCard(
+                title: 'Connection test',
+                children: [
+                  Text(
+                    'One tap separates a bad network from a missing sign-in '
+                    'from an RLS refusal — each step reports on its own. '
+                    'Read-only: it writes nothing.',
+                    style: jakarta(12.5, color: AppColors.inkSoft),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  PosButton(
+                    label: 'Test connection',
+                    icon: AppIcons.check,
+                    variant: PosButtonVariant.quiet,
+                    busy: _probing,
+                    onPressed: _runProbe,
+                  ),
+                  if (_probe != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    for (final r in _probe!) _ProbeRow(result: r),
+                  ],
                 ],
               ),
               SectionCard(
@@ -945,6 +985,44 @@ class _SyncDetailsScreenState extends State<SyncDetailsScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// One line of the connection test: verdict glyph + what was checked.
+class _ProbeRow extends StatelessWidget {
+  const _ProbeRow({required this.result});
+
+  final ProbeResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (result.state) {
+      ProbeState.pass => (AppIcons.check, AppColors.syncedText),
+      ProbeState.warn => (AppIcons.warning, AppColors.pendingText),
+      ProbeState.fail => (AppIcons.error, AppColors.failedText),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  result.label,
+                  style: sora(12.5, weight: FontWeight.w700, color: color),
+                ),
+                Text(result.detail, style: jakarta(12, color: AppColors.inkSoft)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
